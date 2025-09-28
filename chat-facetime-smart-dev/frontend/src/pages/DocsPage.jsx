@@ -1,17 +1,16 @@
 import HeaderDocs from "../components/HeaderDocs";
-import Sidebar from "../components/Sidebar";
-import DocContent from "../components/DocContent";
-import Footer from "../components/Footer";
+// import SidebarDocs from "../components/SidebarDocs";
+// import ContentDocs from "../components/ContentDocs";
+import React from "react";
+import SidebarDocs from "../components/SidebarDocs";
+import DocsContent from "../components/DocContent";
 
 function DocsPage() {
   return (
     <div className="flex flex-col min-h-screen">
-      <HeaderDocs />  {/* dùng header riêng cho docs */}
-      <div className="flex flex-1">
-        <Sidebar />
-        <DocContent />
-      </div>
-      <Footer />
+      <HeaderDocs />
+      <SidebarDocs />
+      <DocsContent />
     </div>
   );
 }

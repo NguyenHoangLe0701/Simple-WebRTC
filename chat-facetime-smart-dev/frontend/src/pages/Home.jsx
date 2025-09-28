@@ -1,14 +1,27 @@
 import React from "react";
-import Header from "../components/Header";
+
 import Hero from "../components/Hero";
-import Footer from "../components/Footer";
+import Features from "../components/Features";
+import SectionLight from "../components/SectionLight";
+import SectionInfo from "../components/SectionInfo";
+import SectionRequirements from "../components/SectionRequirements";
+import SectionPricing from "../components/SectionPricing";
+import SectionCallToAction from "../components/SectionCallToAction";
+import SectionNewsletter from "../components/SectionNewsletter";
+
 
 function Home() {
   return (
     <>
-      <Header />
+     
       <Hero />
-      <Footer />
+      <Features />
+      <SectionLight />
+      <SectionInfo/>
+      <SectionRequirements />
+      <SectionPricing />
+      <SectionCallToAction />
+      <SectionNewsletter />
     </>
   );
 }
