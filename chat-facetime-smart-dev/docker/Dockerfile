@@ -1,18 +1,13 @@
-# --------- Stage 1: Build app với Maven ---------
-FROM eclipse-temurin:17-jdk AS build
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 WORKDIR /app
 
-# Copy code backend vào container
-COPY ../backend ./
-RUN ./mvnw clean package -DskipTests
+# copy từ root vào
+COPY backend ./backend
+RUN mvn -f backend/pom.xml clean package -DskipTests
 
-# --------- Stage 2: Run app ---------
 FROM eclipse-temurin:17-jre
 WORKDIR /app
-COPY --from=build /app/target/*.jar app.jar
+COPY --from=builder /app/backend/target/*.jar app.jar
 
-# Render sẽ set biến PORT, Spring Boot cần nghe port này
-ENV PORT=8080
 EXPOSE 8080
-
-CMD ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
