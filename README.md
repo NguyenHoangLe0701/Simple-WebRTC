@@ -138,12 +138,14 @@ DELETE	/api/admin/users/{id}	Xóa người dùng
 
 🖼️ Giao diện ứng dụng
 <p align="center">
- <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/login.png" alt="Login UI" width="45%"/> 
- <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/admin.png" alt="Admin Dashboard" width="45%"/> 
- </p> 
- <p align="center"> <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/ChatRoom.png" alt="Chat UI" width="45%"/<img src="chat-facetime-smart-dev/frontend/src/assets/images/github/ShareManHinh.png" alt="Video Call UI" width="45%"/> 
- </p>
-💡  ().
+  <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/login.png" alt="Login UI" width="45%"/> 
+  <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/admin.png" alt="Admin Dashboard" width="45%"/> 
+</p> 
+<p align="center">
+  <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/ChatRoom.png" alt="Chat UI" width="45%"/> 
+  <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/ShareManHinh.png" alt="Video Call UI" width="45%"/> 
+</p>
+💡 
 
 🚧 Tính năng đang phát triển
 💬 Chat real-time qua WebSocket
