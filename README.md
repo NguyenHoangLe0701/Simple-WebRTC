@@ -145,7 +145,7 @@ DELETE	/api/admin/users/{id}	Xóa người dùng
 
 <p align="center">
   <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/ChatRoom.png" alt="Chat UI" width="100%"/>
-  <img src="chat-facetime-smart-dev/frontend/src/assets/images/github/ShareManHinh.png" alt="Video Call UI" width="100%"/>
+  <img src="https://raw.githubusercontent.com/NguyenHoangLe0701/Simple-WebRTC/main/chat-facetime-smart-dev/frontend/src/assets/images/github/ShareManHinh.png" alt="Video Call UI" width="100%"/>
 </p>
 💡 
 
