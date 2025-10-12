@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 # local env files
 .env
+.env.local
+.env.cloud
