@@ -20,7 +20,9 @@ import {
   Image,
   Download,
   Bot,
-  LogOut
+  LogOut,
+  Copy,
+  Check
 } from 'lucide-react';
 import AIAssistant from '../components/AIAssistant';
 import EnhancedVideoCall from '../components/EnhancedVideoCall';
@@ -58,6 +60,8 @@ const ChatRoom = () => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [sidebarQuery, setSidebarQuery] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [imagePreviews, setImagePreviews] = useState([]);
   const EMOJIS = useMemo(() => (
@@ -80,78 +84,109 @@ const ChatRoom = () => {
     const username = currentUser?.fullName || currentUser?.username || 'User';
     
     (async () => {
-      if (!socketService.isConnected) {
-        try { 
+      try {
+        // Ensure socket is connected first
+        if (!socketService.isConnected) {
+          console.log('Connecting socket...');
           await socketService.connect(); 
-        } catch (e) { 
-          console.error('Socket connection error:', e); 
         }
-      }
-      setIsConnected(socketService.isConnected);
-      
-      // Join room with user info
-      socketService.joinRoom(roomId, username, {
-        id: currentUser?.id,
-        userId: currentUser?.id,
-        fullName: currentUser?.fullName,
-        name: currentUser?.fullName || currentUser?.username,
-        email: currentUser?.email
-      });
-      
-      // Subscribe to chat messages
-      chatSub = socketService.subscribeToChat(roomId, (messageFrame) => {
-        try {
-          const payload = JSON.parse(messageFrame.body);
-          setMessages(prev => {
-            // Avoid duplicates
-            if (prev.find(m => m.id === payload.id)) return prev;
-            return [...prev, payload];
-          });
-        } catch (e) {
-          console.error('Error parsing chat message:', e);
+        
+        // Wait a bit for connection to stabilize
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        setIsConnected(socketService.isConnected);
+        
+        if (!socketService.isConnected) {
+          console.error('Socket failed to connect');
+          return;
         }
-      });
-      
-      // Subscribe to presence updates
-      presenceSub = socketService.subscribeToPresence(roomId, (messageFrame) => {
-        try {
-          const payload = JSON.parse(messageFrame.body);
-          if (payload?.users) {
-            const usersList = payload.users.map(u => ({ 
-              id: u.id || u.username, 
-              name: u.fullName || u.username, 
-              avatar: (u.fullName || u.username || 'U').charAt(0).toUpperCase(), 
-              status: u.status || 'online' 
-            }));
-            // Always include current user in the list
-            const currentUserInList = usersList.find(u => u.id === (currentUser?.id || currentUser?.username));
-            if (!currentUserInList && currentUser) {
-              usersList.push({
-                id: currentUser.id || currentUser.username,
-                name: currentUser.fullName || currentUser.username,
-                avatar: (currentUser.fullName || currentUser.username || 'U').charAt(0).toUpperCase(),
-                status: 'online'
-              });
+        
+        console.log('Socket connected, joining room:', roomId);
+        
+        // Join room with user info
+        socketService.joinRoom(roomId, username, {
+          id: currentUser?.id,
+          userId: currentUser?.id,
+          fullName: currentUser?.fullName,
+          name: currentUser?.fullName || currentUser?.username,
+          email: currentUser?.email
+        });
+        
+        // Wait a bit for join to complete before subscribing
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // Subscribe to chat messages
+        chatSub = socketService.subscribeToChat(roomId, (messageFrame) => {
+          try {
+            const payload = JSON.parse(messageFrame.body);
+            console.log('Received chat message in room', roomId, ':', payload);
+            setMessages(prev => {
+              // Avoid duplicates by checking id
+              const existingMsg = prev.find(m => m.id === payload.id);
+              if (existingMsg) {
+                console.log('Duplicate message ignored:', payload.id);
+                return prev;
+              }
+              console.log('Adding new message to chat');
+              return [...prev, payload];
+            });
+          } catch (e) {
+            console.error('Error parsing chat message:', e, messageFrame.body);
+          }
+        });
+        
+        console.log('Subscribed to chat:', `/topic/chat/${roomId}`);
+        
+        // Subscribe to presence updates
+        presenceSub = socketService.subscribeToPresence(roomId, (messageFrame) => {
+          try {
+            const payload = JSON.parse(messageFrame.body);
+            console.log('Received presence update:', payload);
+            if (payload?.users) {
+              const usersList = payload.users.map(u => ({ 
+                id: u.id || u.username, 
+                name: u.fullName || u.username, 
+                avatar: (u.fullName || u.username || 'U').charAt(0).toUpperCase(), 
+                status: u.status || 'online' 
+              }));
+              // Always include current user in the list
+              const currentUserInList = usersList.find(u => u.id === (currentUser?.id || currentUser?.username));
+              if (!currentUserInList && currentUser) {
+                usersList.push({
+                  id: currentUser.id || currentUser.username,
+                  name: currentUser.fullName || currentUser.username,
+                  avatar: (currentUser.fullName || currentUser.username || 'U').charAt(0).toUpperCase(),
+                  status: 'online'
+                });
+              }
+              console.log('Setting online users:', usersList);
+              setOnlineUsers(usersList);
             }
-            setOnlineUsers(usersList);
+          } catch (e) {
+            console.error('Error parsing presence message:', e);
           }
-        } catch (e) {
-          console.error('Error parsing presence message:', e);
-        }
-      });
-      
-      // Subscribe to signaling for video calls
-      signalSub = socketService.subscribeToSignaling(roomId, (frame) => {
-        try {
-          const data = JSON.parse(frame.body);
-          // Handle join/leave events for presence
-          if (data.type === 'join' || data.type === 'leave') {
-            // Presence will be updated via presence subscription
+        });
+        
+        console.log('Subscribed to presence:', `/topic/presence/${roomId}`);
+        
+        // Subscribe to signaling for video calls
+        signalSub = socketService.subscribeToSignaling(roomId, (frame) => {
+          try {
+            const data = JSON.parse(frame.body);
+            console.log('Received signaling:', data);
+            // Handle join/leave events for presence
+            if (data.type === 'join' || data.type === 'leave') {
+              // Presence will be updated via presence subscription
+            }
+          } catch (e) {
+            console.error('Error parsing signaling message:', e);
           }
-        } catch (e) {
-          console.error('Error parsing signaling message:', e);
-        }
-      });
+        });
+        
+        console.log('Subscribed to signaling:', `/topic/room/${roomId}`);
+      } catch (e) {
+        console.error('Error in socket setup:', e);
+      }
     })();
     
     return () => {
@@ -213,13 +248,16 @@ const ChatRoom = () => {
     
     // Send via socket
     if (socketService.isConnected) {
-      console.log('Sending message via socket:', message);
+      console.log('=== SENDING MESSAGE ===');
+      console.log('Room:', roomId);
+      console.log('Message:', JSON.stringify(message, null, 2));
       socketService.sendMessage(roomId, message);
     } else {
       console.warn('Socket not connected, attempting to connect...');
       // Try to reconnect
       socketService.connect().then(() => {
         if (socketService.isConnected) {
+          console.log('Reconnected, sending message...');
           socketService.sendMessage(roomId, message);
         }
       }).catch(err => {
@@ -318,13 +356,42 @@ const ChatRoom = () => {
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!currentUser) {
+      // Store roomId in sessionStorage to redirect after login
+      if (roomId && roomId !== 'general') {
+        sessionStorage.setItem('redirectAfterLogin', `/chat/${roomId}`);
+      }
       navigate('/login');
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, roomId]);
 
   if (!currentUser) {
     return null; // Prevent flash of content
   }
+
+  // Function to generate and copy room link
+  const copyRoomLink = async () => {
+    const roomLink = `${window.location.origin}/chat/${roomId}`;
+    try {
+      await navigator.clipboard.writeText(roomLink);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = roomLink;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const shareRoom = () => {
+    setShowShareModal(true);
+    copyRoomLink();
+  };
 
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
@@ -461,6 +528,13 @@ const ChatRoom = () => {
                 <span className="text-sm font-medium hidden sm:block">{currentUser?.fullName || currentUser?.username || 'User'}</span>
               </div>
             </div>
+            <button 
+              onClick={shareRoom}
+              className={`p-2 rounded-lg transition-colors ${copiedLink ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              title={copiedLink ? "Đã copy link!" : "Chia sẻ phòng"}
+            >
+              {copiedLink ? <Check className="h-5 w-5" /> : <Share2 className="h-5 w-5" />}
+            </button>
             <button 
               onClick={() => setShowAIAssistant(!showAIAssistant)} 
               className={`p-2 rounded-lg transition-colors ${showAIAssistant ? 'bg-purple-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`} 
@@ -714,6 +788,78 @@ const ChatRoom = () => {
         roomId={roomId}
         currentUser={currentUser}
       />
+
+      {/* Share Room Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Chia sẻ phòng chat</h3>
+              <button 
+                onClick={() => setShowShareModal(false)}
+                className="text-gray-500 hover:text-gray-700 text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Link phòng chat:
+              </label>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={`${window.location.origin}/chat/${roomId}`}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
+                />
+                <button
+                  onClick={copyRoomLink}
+                  className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  title="Copy link"
+                >
+                  {copiedLink ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                </button>
+              </div>
+            </div>
+
+            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Mã phòng:</strong> <code className="bg-white px-2 py-1 rounded font-mono">{roomId}</code>
+              </p>
+              <p className="text-xs text-blue-600 mt-2">
+                Gửi link này cho bạn bè để họ tham gia phòng chat. Họ cần đăng nhập để vào phòng.
+              </p>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={() => {
+                  copyRoomLink();
+                  // Try to use Web Share API if available
+                  if (navigator.share) {
+                    navigator.share({
+                      title: `Tham gia phòng chat: ${roomId}`,
+                      text: `Tham gia phòng chat ${roomId}`,
+                      url: `${window.location.origin}/chat/${roomId}`
+                    }).catch(err => console.log('Error sharing:', err));
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Chia sẻ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

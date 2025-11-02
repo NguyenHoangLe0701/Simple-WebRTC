@@ -24,10 +24,17 @@ public class SignalingController {
   public void chat(@DestinationVariable String roomId, @Payload Object msgPayload) {
     // Handle both ChatMessage objects and Map<String, Object> from frontend
     try {
+      System.out.println("=== CHAT MESSAGE RECEIVED ===");
+      System.out.println("Room: " + roomId);
+      System.out.println("Payload: " + msgPayload.toString());
+      
       // Forward the message to all subscribers in the room
       template.convertAndSend("/topic/chat/" + roomId, msgPayload);
+      
+      System.out.println("Message broadcasted to /topic/chat/" + roomId);
     } catch (Exception e) {
       System.err.println("Error broadcasting chat message: " + e.getMessage());
+      e.printStackTrace();
     }
   }
 }

@@ -124,6 +124,11 @@ public class RoomWebSocketController {
                     activeUsers.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet())
                         .add(new UserPresence(userId, username, fullName));
                     
+                    System.out.println("=== USER JOINED ROOM ===");
+                    System.out.println("Room: " + roomId);
+                    System.out.println("User: " + userId + " (" + fullName + ")");
+                    System.out.println("Active users in room: " + activeUsers.get(roomId).size());
+                    
                     // Notify user they're approved
                     Map<String, Object> approvedStatus = new HashMap<>();
                     approvedStatus.put("type", "approved");
@@ -131,8 +136,18 @@ public class RoomWebSocketController {
                     approvedStatus.put("message", "Bạn đã được phép vào phòng!");
                     messagingTemplate.convertAndSendToUser(userId, "/queue/approval-status", approvedStatus);
                     
-                    // Broadcast presence update
+                    // Broadcast presence update to ALL users in the room
                     broadcastPresence(roomId);
+                    
+                    // Also send join notification
+                    Map<String, Object> joinNotification = new HashMap<>();
+                    joinNotification.put("type", "join");
+                    joinNotification.put("user", Map.of(
+                        "id", userId,
+                        "username", username,
+                        "fullName", fullName != null ? fullName : username
+                    ));
+                    messagingTemplate.convertAndSend("/topic/room/" + roomId, joinNotification);
                 }
             } catch (Exception e) {
                 // If join fails, still allow WebSocket connection for chat
@@ -236,11 +251,25 @@ public class RoomWebSocketController {
             
             final String finalUserId = userId; // Make effectively final for lambda
             if (finalUserId != null) {
+                System.out.println("=== USER LEAVING ROOM ===");
+                System.out.println("Room: " + roomId);
+                System.out.println("User: " + finalUserId);
+                
                 Set<UserPresence> users = activeUsers.get(roomId);
                 if (users != null) {
                     users.removeIf(u -> u.userId.equals(finalUserId));
+                    
+                    // Send leave notification
+                    Map<String, Object> leaveNotification = new HashMap<>();
+                    leaveNotification.put("type", "leave");
+                    leaveNotification.put("user", Map.of("id", finalUserId));
+                    messagingTemplate.convertAndSend("/topic/room/" + roomId, leaveNotification);
+                    
                     if (users.isEmpty()) {
                         activeUsers.remove(roomId);
+                    } else {
+                        // Broadcast updated presence
+                        broadcastPresence(roomId);
                     }
                 }
                 
@@ -252,9 +281,6 @@ public class RoomWebSocketController {
                 } catch (Exception e) {
                     // Ignore service errors
                 }
-                
-                // Broadcast presence update
-                broadcastPresence(roomId);
             }
         } catch (Exception e) {
             System.err.println("Error in handleLeaveRoom: " + e.getMessage());
@@ -276,7 +302,7 @@ public class RoomWebSocketController {
             userMap.put("id", user.userId);
             userMap.put("username", user.username);
             userMap.put("fullName", user.fullName);
-            userMap.put("status", user.status);
+            userMap.put("status", user.status != null ? user.status : "online");
             userList.add(userMap);
         }
         
@@ -284,6 +310,11 @@ public class RoomWebSocketController {
         presence.put("users", userList);
         presence.put("count", users.size());
         presence.put("roomId", roomId);
+        
+        System.out.println("=== BROADCASTING PRESENCE ===");
+        System.out.println("Room: " + roomId);
+        System.out.println("Users count: " + users.size());
+        System.out.println("Users: " + userList);
         
         messagingTemplate.convertAndSend("/topic/presence/" + roomId, presence);
     }

@@ -46,6 +46,14 @@ function Login() {
         
         setSuccess("Đăng nhập thành công! Đang chuyển hướng...");
         
+        // Check if there's a redirect path stored (from room link)
+        const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+        if (redirectPath) {
+          sessionStorage.removeItem('redirectAfterLogin');
+          setTimeout(() => navigate(redirectPath), 1000);
+          return;
+        }
+        
         // Redirect based on role
         if (response.data.role === 'ADMIN') {
           setTimeout(() => navigate('/admin'), 1500);
