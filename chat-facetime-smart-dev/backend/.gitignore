@@ -1,10 +1,14 @@
-HELP.md
+# -------------------------
+# Backend / Java / Spring Boot
+# -------------------------
+
+# Maven / Gradle build
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-### STS ###
+# IDE / Editor
 .apt_generated
 .classpath
 .factorypath
@@ -12,24 +16,68 @@ target/
 .settings
 .springBeans
 .sts4-cache
-
-### IntelliJ IDEA ###
 .idea
-*.iws
 *.iml
+*.iws
 *.ipr
 
-### NetBeans ###
+# NetBeans
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
-/.nb-gradle/
+.nb-gradle/
 build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
-### VS Code ###
+# VS Code
 .vscode/
 
-mysql_data/
+# -------------------------
+# Backend local environment / secrets
+# -------------------------
+backend/.env
+backend/.env.local
+backend/.env.cloud
+
+# Docker MySQL data
+backend/mysql_data/
+backend/mysql_data/*
+
+# Logs
+logs
+*.log
+
+# -------------------------
+# Frontend / Node / React
+# -------------------------
+# Node modules & build
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# Frontend environment files (nếu có)
+frontend/.env
+frontend/.env.local
+frontend/.env.cloud
+
+# Editor directories and files
+frontend/.vscode/*
+!frontend/.vscode/extensions.json
+
+# npm / yarn / pnpm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS / misc
+.DS_Store
+*.local
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
