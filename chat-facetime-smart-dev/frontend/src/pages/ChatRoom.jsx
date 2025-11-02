@@ -121,24 +121,54 @@ const ChatRoom = () => {
         // Subscribe to chat messages
         chatSub = socketService.subscribeToChat(roomId, (messageFrame) => {
           try {
+            console.log('=== RECEIVED MESSAGE FRAME ===');
+            console.log('Room:', roomId);
+            console.log('Frame body:', messageFrame.body);
+            console.log('Frame headers:', messageFrame.headers);
+            
             const payload = JSON.parse(messageFrame.body);
-            console.log('Received chat message in room', roomId, ':', payload);
+            console.log('Parsed payload:', payload);
+            
+            // Validate payload
+            if (!payload || !payload.id || !payload.content) {
+              console.warn('Invalid message payload:', payload);
+              return;
+            }
+            
             setMessages(prev => {
               // Avoid duplicates by checking id
               const existingMsg = prev.find(m => m.id === payload.id);
               if (existingMsg) {
-                console.log('Duplicate message ignored:', payload.id);
+                console.log('⚠️ Duplicate message ignored:', payload.id);
+                console.log('  Existing message:', existingMsg);
+                console.log('  Incoming message:', payload);
                 return prev;
               }
-              console.log('Adding new message to chat');
-              return [...prev, payload];
+              
+              console.log('✅ Adding new message to chat:', payload.id);
+              console.log('  Sender:', payload.sender);
+              console.log('  Content:', payload.content);
+              console.log('  Timestamp:', payload.timestamp);
+              
+              // Return new array with the message
+              const newMessages = [...prev, payload];
+              console.log('📊 Total messages after adding:', newMessages.length);
+              console.log('  Previous count:', prev.length);
+              console.log('  All message IDs:', newMessages.map(m => m.id));
+              
+              return newMessages;
             });
           } catch (e) {
-            console.error('Error parsing chat message:', e, messageFrame.body);
+            console.error('❌ Error parsing chat message:', e);
+            console.error('Raw body:', messageFrame.body);
           }
         });
         
-        console.log('Subscribed to chat:', `/topic/chat/${roomId}`);
+        if (chatSub) {
+          console.log('✅ Successfully subscribed to chat:', `/topic/chat/${roomId}`);
+        } else {
+          console.error('❌ Failed to subscribe to chat:', `/topic/chat/${roomId}`);
+        }
         
         // Subscribe to presence updates
         presenceSub = socketService.subscribeToPresence(roomId, (messageFrame) => {
@@ -233,38 +263,71 @@ const ChatRoom = () => {
   const sendMessage = () => {
     if (!newMessage.trim()) return;
     
+    const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const senderId = currentUser?.id || currentUser?.userId || currentUser?.username || 'unknown';
+    const senderName = currentUser?.fullName || currentUser?.username || 'You';
+    
     const message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      sender: currentUser?.fullName || currentUser?.username || 'You',
-      senderId: currentUser?.id || currentUser?.username,
-      content: newMessage,
+      id: messageId,
+      sender: senderName,
+      senderId: senderId,
+      content: newMessage.trim(),
       timestamp: new Date().toISOString(),
       type: 'text',
       roomId: roomId,
-      avatar: (currentUser?.fullName || currentUser?.username || 'Y').charAt(0).toUpperCase(),
+      avatar: senderName.charAt(0).toUpperCase(),
       replyTo: replyTo ? { id: replyTo.id, sender: replyTo.sender, preview: String(replyTo.content).slice(0, 100) } : undefined,
       reactions: {}
     };
     
-    // Optimistic update
-    setMessages(prev => [...prev, message]);
+    console.log('=== SENDING MESSAGE ===');
+    console.log('Room:', roomId);
+    console.log('Sender ID:', senderId);
+    console.log('Sender Name:', senderName);
+    console.log('Message:', JSON.stringify(message, null, 2));
+    
+    // Optimistic update - chỉ thêm message tạm thời
+    setMessages(prev => {
+      // Kiểm tra xem đã có message này chưa (tránh duplicate)
+      if (prev.find(m => m.id === messageId)) {
+        return prev;
+      }
+      return [...prev, message];
+    });
     
     // Send via socket
     if (socketService.isConnected) {
-      console.log('=== SENDING MESSAGE ===');
-      console.log('Room:', roomId);
-      console.log('Message:', JSON.stringify(message, null, 2));
-      socketService.sendMessage(roomId, message);
+      try {
+        console.log('📤 Calling sendMessage...');
+        console.log('  RoomId:', roomId);
+        console.log('  Message:', message);
+        socketService.sendMessage(roomId, message);
+        console.log('✅ sendMessage called successfully');
+      } catch (err) {
+        console.error('❌ Error sending message:', err);
+        // Remove optimistic update on error
+        setMessages(prev => {
+          const filtered = prev.filter(m => m.id !== messageId);
+          console.log('Removed message from state, count:', filtered.length);
+          return filtered;
+        });
+      }
     } else {
-      console.warn('Socket not connected, attempting to connect...');
+      console.warn('⚠️ Socket not connected, attempting to connect...');
+      console.log('Socket connection state:', socketService.isConnected);
+      // Remove optimistic update if can't send
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      
       // Try to reconnect
       socketService.connect().then(() => {
         if (socketService.isConnected) {
-          console.log('Reconnected, sending message...');
+          console.log('✅ Reconnected, sending message...');
           socketService.sendMessage(roomId, message);
+        } else {
+          console.error('❌ Reconnection failed - still not connected');
         }
       }).catch(err => {
-        console.error('Failed to reconnect:', err);
+        console.error('❌ Failed to reconnect:', err);
       });
     }
     
@@ -584,6 +647,15 @@ const ChatRoom = () => {
                 <p className="text-lg font-medium">Chưa có tin nhắn nào</p>
                 <p className="text-sm mt-2">Hãy bắt đầu cuộc trò chuyện!</p>
               </div>
+            </div>
+          )}
+          
+          {/* Debug messages count */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="fixed top-2 right-2 bg-black/70 text-white text-xs p-2 rounded z-50">
+              Messages: {messages.length} | Filtered: {messages.filter(m =>
+                !sidebarQuery || String(m.content).toLowerCase().includes(sidebarQuery.toLowerCase())
+              ).length} | Query: "{sidebarQuery}"
             </div>
           )}
           

@@ -29,8 +29,15 @@ class SocketService {
             console.log('STOMP: ' + str);
           },
           onConnect: (frame) => {
-            console.log('Connected: ' + frame);
+            console.log('✅ STOMP Connected: ' + frame);
+            console.log('  Frame headers:', frame.headers);
             this.isConnected = true;
+            
+            // Log all active subscriptions after connection
+            setTimeout(() => {
+              console.log('📋 Active subscriptions:', Array.from(this.subscriptions.keys()));
+            }, 100);
+            
             resolve();
           },
           onStompError: (frame) => {
@@ -59,11 +66,55 @@ class SocketService {
 
   subscribe(destination, callback) {
     if (this.stompClient && this.isConnected) {
-      const subscription = this.stompClient.subscribe(destination, callback);
-      this.subscriptions.set(destination, subscription);
-      return subscription;
+      console.log('📥 Subscribing to:', destination);
+      console.log('  STOMP client:', this.stompClient);
+      console.log('  Is connected:', this.isConnected);
+      
+      try {
+        const subscription = this.stompClient.subscribe(destination, (frame) => {
+          console.log('📨 MESSAGE RECEIVED FROM SUBSCRIPTION:', destination);
+          console.log('  Frame:', frame);
+          console.log('  Body:', frame.body);
+          console.log('  Headers:', frame.headers);
+          console.log('  Destination header:', frame.headers?.destination || destination);
+          
+          if (!frame.body) {
+            console.warn('⚠️ Empty frame body received');
+            return;
+          }
+          
+          console.log('  Calling callback...');
+          try {
+            callback(frame);
+            console.log('✅ Callback executed successfully');
+          } catch (callbackErr) {
+            console.error('❌ Error in subscription callback:', callbackErr);
+            console.error('  Error details:', callbackErr.message, callbackErr.stack);
+          }
+        });
+        
+        if (subscription) {
+          this.subscriptions.set(destination, subscription);
+          console.log('✅ Successfully subscribed to:', destination);
+          console.log('  Subscription ID:', subscription.id || 'unknown');
+          console.log('  Total subscriptions:', this.subscriptions.size);
+          console.log('  All subscriptions:', Array.from(this.subscriptions.keys()));
+        } else {
+          console.error('❌ Subscription returned null/undefined for:', destination);
+        }
+        
+        return subscription;
+      } catch (err) {
+        console.error('❌ Error subscribing to:', destination, err);
+        console.error('  Error details:', err.message, err.stack);
+        return null;
+      }
+    } else {
+      console.error('❌ Cannot subscribe - not connected. Destination:', destination);
+      console.error('  STOMP client exists:', !!this.stompClient);
+      console.error('  Is connected:', this.isConnected);
+      return null;
     }
-    return null;
   }
 
   unsubscribe(destination) {
@@ -76,13 +127,24 @@ class SocketService {
 
   send(destination, body, headers = {}) {
     if (this.stompClient && this.isConnected) {
-      this.stompClient.publish({
-        destination: destination,
-        body: JSON.stringify(body),
-        headers: headers
-      });
+      const bodyStr = JSON.stringify(body);
+      console.log('📤 Sending STOMP message:');
+      console.log('  Destination:', destination);
+      console.log('  Body:', bodyStr);
+      console.log('  Headers:', headers);
+      
+      try {
+        this.stompClient.publish({
+          destination: destination,
+          body: bodyStr,
+          headers: headers
+        });
+        console.log('✅ Message published successfully');
+      } catch (err) {
+        console.error('❌ Error publishing message:', err);
+      }
     } else {
-      console.error('Not connected to WebSocket');
+      console.error('❌ Not connected to WebSocket - cannot send message');
     }
   }
 
@@ -111,7 +173,26 @@ class SocketService {
 
   // Subscribe to chat messages
   subscribeToChat(roomId, callback) {
-    return this.subscribe(`/topic/chat/${roomId}`, callback);
+    const destination = `/topic/chat/${roomId}`;
+    console.log('📥 subscribeToChat called for:', destination);
+    
+    const wrappedCallback = (frame) => {
+      console.log('📨 Chat message callback triggered!');
+      console.log('  Destination:', frame.headers?.destination || destination);
+      console.log('  Body:', frame.body);
+      console.log('  Headers:', frame.headers);
+      callback(frame);
+    };
+    
+    const subscription = this.subscribe(destination, wrappedCallback);
+    
+    if (subscription) {
+      console.log('✅ subscribeToChat successful, subscription:', subscription);
+    } else {
+      console.error('❌ subscribeToChat failed - subscription is null');
+    }
+    
+    return subscription;
   }
 
   // Subscribe to signaling messages
