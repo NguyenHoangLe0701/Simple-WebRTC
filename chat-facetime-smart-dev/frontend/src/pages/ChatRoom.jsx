@@ -213,9 +213,18 @@ const ChatRoom = () => {
     
     // Send via socket
     if (socketService.isConnected) {
+      console.log('Sending message via socket:', message);
       socketService.sendMessage(roomId, message);
     } else {
-      console.warn('Socket not connected, message not sent');
+      console.warn('Socket not connected, attempting to connect...');
+      // Try to reconnect
+      socketService.connect().then(() => {
+        if (socketService.isConnected) {
+          socketService.sendMessage(roomId, message);
+        }
+      }).catch(err => {
+        console.error('Failed to reconnect:', err);
+      });
     }
     
     setNewMessage('');
@@ -286,8 +295,15 @@ const ChatRoom = () => {
   };
 
   const formatTime = (date) => {
-    const d = date instanceof Date ? date : new Date(date);
-    return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    try {
+      const d = date instanceof Date ? date : new Date(date);
+      if (isNaN(d.getTime())) {
+        return 'Vừa xong';
+      }
+      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      return 'Vừa xong';
+    }
   };
 
   const getStatusColor = (status) => {
@@ -299,8 +315,19 @@ const ChatRoom = () => {
     }
   };
 
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login');
+    }
+  }, [currentUser, navigate]);
+
+  if (!currentUser) {
+    return null; // Prevent flash of content
+  }
+
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
       {/* Sidebar (channels/users) */}
       <div className="w-72 bg-white border-r flex flex-col">
         {/* Current user card */}
@@ -637,10 +664,17 @@ const ChatRoom = () => {
                 onChange={(e) => {
                   setNewMessage(e.target.value);
                   setIsTyping(true);
-                  window.clearTimeout(window.__typingTimer);
+                  if (window.__typingTimer) {
+                    clearTimeout(window.__typingTimer);
+                  }
                   window.__typingTimer = window.setTimeout(()=>setIsTyping(false), 1200);
                 }} 
-                onKeyDown={(e) => e.key === 'Enter' && sendMessage()} 
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                  }
+                }} 
                 placeholder="Nhập tin nhắn..." 
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" 
               />

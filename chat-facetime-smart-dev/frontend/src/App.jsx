@@ -17,8 +17,9 @@ import ChatRoom from "./pages/ChatRoom";
 function App() {
   const location = useLocation(); // Lấy thông tin route hiện tại
 
- // Ẩn Header/Footer trên các trang full-layout
- const showHeaderFooter = !["/login", "/register", "/forgotpassword", "/docspage", "/admin", "/chat"].includes(location.pathname);
+ // Ẩn Header/Footer trên các trang full-layout (bao gồm tất cả /chat/* routes)
+ const hideHeaderFooterPaths = ["/login", "/register", "/forgotpassword", "/docspage", "/admin"];
+ const showHeaderFooter = !hideHeaderFooterPaths.includes(location.pathname) && !location.pathname.startsWith("/chat");
 
   return (
     <div className="font-sans">

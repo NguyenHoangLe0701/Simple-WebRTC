@@ -11,8 +11,18 @@ class SocketService {
   connect() {
     return new Promise((resolve, reject) => {
       try {
-        // Use Vite proxy to route to backend and avoid cross-origin/auth prompts
-        const socket = new SockJS('/ws');
+        // Get backend URL from environment or use proxy for development
+        const apiUrl = import.meta.env.VITE_API_URL || '';
+        let wsUrl = '/ws'; // Default: use proxy in development
+        
+        if (apiUrl) {
+          // Extract base URL (remove /api suffix if present)
+          const baseUrl = apiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '');
+          wsUrl = `${baseUrl}/ws`;
+        }
+        
+        console.log('Connecting to WebSocket:', wsUrl);
+        const socket = new SockJS(wsUrl);
         this.stompClient = new Client({
           webSocketFactory: () => socket,
           debug: (str) => {

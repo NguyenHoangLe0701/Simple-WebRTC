@@ -21,8 +21,13 @@ public class SignalingController {
   }
 
   @MessageMapping("/chat/{roomId}")
-  public void chat(@DestinationVariable String roomId, @Payload ChatMessage msg) {
-    template.convertAndSend("/topic/chat/" + roomId, msg);
-    // optionally save message via ChatService (injected)
+  public void chat(@DestinationVariable String roomId, @Payload Object msgPayload) {
+    // Handle both ChatMessage objects and Map<String, Object> from frontend
+    try {
+      // Forward the message to all subscribers in the room
+      template.convertAndSend("/topic/chat/" + roomId, msgPayload);
+    } catch (Exception e) {
+      System.err.println("Error broadcasting chat message: " + e.getMessage());
+    }
   }
 }
