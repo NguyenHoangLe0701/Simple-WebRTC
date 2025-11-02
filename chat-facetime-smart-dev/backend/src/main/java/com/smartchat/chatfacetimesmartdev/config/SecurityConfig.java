@@ -54,6 +54,7 @@ public class SecurityConfig {
                 .requestMatchers("/ws/**").permitAll()
                 .requestMatchers("/", "/index.html", "/assets/**", "/images/**", "/favicon.ico", "/vite.svg").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
+                .requestMatchers("/api/rooms/**").permitAll() // Allow room endpoints for now
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
