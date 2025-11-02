@@ -38,16 +38,39 @@ import {
   Mail,
   Download,
   Filter,
-  X
+  X,
+  Plus,
+  Lock,
+  Unlock,
+  Monitor,
+  MessageCircle as ChatIcon,
+  EyeOff,
+  UserMinus,
+  Star,
+  TrendingUp as Growth
 } from 'lucide-react';
+import api from '../services/api';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
+  const [rooms, setRooms] = useState([]);
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [currentUser, setCurrentUser] = useState(null);
+  const [newRoom, setNewRoom] = useState({
+    name: '',
+    description: '',
+    maxParticipants: 50,
+    isPrivate: false,
+    allowScreenShare: true,
+    allowChat: true
+  });
   const [notifications] = useState([
     { id: 1, type: 'success', message: 'Người dùng mới đã đăng ký', time: '2 phút trước' },
     { id: 2, type: 'warning', message: 'Hệ thống cần bảo trì', time: '1 giờ trước' },
@@ -58,10 +81,8 @@ const AdminDashboard = () => {
   const tabs = [
     { id: 'overview', name: 'Tổng quan', icon: BarChart3, color: 'text-blue-600', bgColor: 'bg-blue-50' },
     { id: 'users', name: 'Người dùng', icon: Users, color: 'text-green-600', bgColor: 'bg-green-50' },
-    { id: 'analytics', name: 'Phân tích', icon: Activity, color: 'text-purple-600', bgColor: 'bg-purple-50' },
-    { id: 'chat', name: 'Chat', icon: MessageCircle, color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
-    { id: 'video', name: 'Video Call', icon: Video, color: 'text-red-600', bgColor: 'bg-red-50' },
-    { id: 'code', name: 'Code Editor', icon: Code, color: 'text-orange-600', bgColor: 'bg-orange-50' },
+    { id: 'rooms', name: 'Phòng họp', icon: Video, color: 'text-purple-600', bgColor: 'bg-purple-50' },
+    { id: 'analytics', name: 'Phân tích', icon: Activity, color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
     { id: 'security', name: 'Bảo mật', icon: Shield, color: 'text-yellow-600', bgColor: 'bg-yellow-50' },
     { id: 'database', name: 'Database', icon: Database, color: 'text-cyan-600', bgColor: 'bg-cyan-50' },
     { id: 'settings', name: 'Cài đặt', icon: Settings, color: 'text-gray-600', bgColor: 'bg-gray-50' }
@@ -70,7 +91,7 @@ const AdminDashboard = () => {
   const statCards = [
     {
       title: "Tổng người dùng",
-      value: 0,
+      value: stats.totalUsers || 0,
       icon: Users,
       color: "from-blue-500 to-blue-600",
       bgColor: "bg-blue-50",
@@ -80,8 +101,8 @@ const AdminDashboard = () => {
       description: "Tăng 12% so với tháng trước"
     },
     {
-      title: "Người dùng thường",
-      value: 0,
+      title: "Người dùng hoạt động",
+      value: stats.activeUsers || 0,
       icon: User,
       color: "from-green-500 to-green-600",
       bgColor: "bg-green-50",
@@ -91,34 +112,137 @@ const AdminDashboard = () => {
       description: "Người dùng đang hoạt động"
     },
     {
-      title: "Quản trị viên",
-      value: 0,
-      icon: Shield,
+      title: "Tổng phòng họp",
+      value: stats.totalRooms || 0,
+      icon: Video,
       color: "from-purple-500 to-purple-600",
       bgColor: "bg-purple-50",
       textColor: "text-purple-600",
-      change: 0,
-      trend: "neutral",
-      description: "Quyền truy cập cao"
+      change: 5,
+      trend: "up",
+      description: "Phòng đã tạo"
     },
     {
-      title: "Hoạt động hôm nay",
-      value: "1,234",
+      title: "Người tham gia",
+      value: stats.totalParticipants || 0,
       icon: Activity,
       color: "from-orange-500 to-orange-600",
       bgColor: "bg-orange-50",
       textColor: "text-orange-600",
-      change: -2,
-      trend: "down",
-      description: "Phiên đăng nhập"
+      change: 15,
+      trend: "up",
+      description: "Tổng người tham gia"
     }
   ];
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setCurrentUser(user);
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      // Fetch users
+      const usersResponse = await api.get('/api/admin/users');
+      setUsers(usersResponse.data);
+      
+      // Fetch rooms
+      const roomsResponse = await api.get('/api/rooms');
+      setRooms(roomsResponse.data);
+      
+      // Calculate stats
+      const totalUsers = usersResponse.data.length;
+      const activeUsers = usersResponse.data.filter(user => user.active).length;
+      const totalRooms = roomsResponse.data.length;
+      const activeRooms = roomsResponse.data.filter(room => room.isActive).length;
+      
+      setStats({
+        totalUsers,
+        activeUsers,
+        totalRooms,
+        activeRooms,
+        totalParticipants: roomsResponse.data.reduce((sum, room) => sum + (room.participants?.length || 0), 0)
+      });
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login';
   };
+
+  const deleteRoom = async (roomId) => {
+    try {
+      await api.delete(`/api/rooms/${roomId}`);
+      setRooms(prev => prev.filter(room => room.id !== roomId));
+    } catch (error) {
+      console.error('Error deleting room:', error);
+    }
+  };
+
+  const toggleRoomLock = async (roomId, isLocked) => {
+    try {
+      await api.put(`/api/rooms/${roomId}/settings`, { isLocked: !isLocked });
+      setRooms(prev => prev.map(room => 
+        room.id === roomId ? { ...room, isLocked: !isLocked } : room
+      ));
+    } catch (error) {
+      console.error('Error toggling room lock:', error);
+    }
+  };
+
+  const createRoom = async () => {
+    try {
+      const response = await api.post('/api/rooms', {
+        ...newRoom,
+        hostId: currentUser.id,
+        hostName: currentUser.fullName || currentUser.username
+      });
+      
+      setRooms(prev => [response.data, ...prev]);
+      setShowCreateRoomModal(false);
+      setNewRoom({
+        name: '',
+        description: '',
+        maxParticipants: 50,
+        isPrivate: false,
+        allowScreenShare: true,
+        allowChat: true
+      });
+    } catch (error) {
+      console.error('Error creating room:', error);
+    }
+  };
+
+  const getRoomStatus = (room) => {
+    if (room.isLocked) return { text: 'Đã khóa', color: 'text-red-600', bg: 'bg-red-100' };
+    if (room.participants?.length >= room.maxParticipants) return { text: 'Đầy', color: 'text-orange-600', bg: 'bg-orange-100' };
+    if (room.isActive) return { text: 'Hoạt động', color: 'text-green-600', bg: 'bg-green-100' };
+    return { text: 'Chờ', color: 'text-gray-600', bg: 'bg-gray-100' };
+  };
+
+  const filteredRooms = rooms.filter(room => {
+    const matchesSearch = room.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         room.description.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    switch (filter) {
+      case 'active':
+        return matchesSearch && room.isActive;
+      case 'locked':
+        return matchesSearch && room.isLocked;
+      case 'private':
+        return matchesSearch && room.isPrivate;
+      default:
+        return matchesSearch;
+    }
+  });
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('vi-VN', {
@@ -516,6 +640,190 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {/* Rooms Tab */}
+          {activeTab === 'rooms' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900">Quản lý phòng họp</h3>
+                    <p className="text-gray-600">Quản lý tất cả phòng họp trong hệ thống</p>
+                  </div>
+                  <button
+                    onClick={() => setShowCreateRoomModal(true)}
+                    className="flex items-center space-x-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg"
+                  >
+                    <Plus className="h-5 w-5" />
+                    <span>Tạo phòng mới</span>
+                  </button>
+                </div>
+
+                {/* Search and Filters */}
+                <div className="flex items-center space-x-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Tìm kiếm phòng họp..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setFilter('all')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        filter === 'all' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Tất cả
+                    </button>
+                    <button
+                      onClick={() => setFilter('active')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        filter === 'active' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Hoạt động
+                    </button>
+                    <button
+                      onClick={() => setFilter('locked')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        filter === 'locked' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Đã khóa
+                    </button>
+                    <button
+                      onClick={() => setFilter('private')}
+                      className={`px-4 py-2 rounded-lg transition-colors ${
+                        filter === 'private' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      Riêng tư
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rooms Grid */}
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredRooms.map((room) => {
+                    const status = getRoomStatus(room);
+                    
+                    return (
+                      <div key={room.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all duration-200">
+                        {/* Room Header */}
+                        <div className="bg-gradient-to-r from-purple-500 to-blue-600 p-4 text-white">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                                <Video className="h-5 w-5" />
+                              </div>
+                              <div>
+                                <h3 className="font-semibold text-lg">{room.name}</h3>
+                                <p className="text-purple-100 text-sm">{room.description}</p>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center space-x-1 bg-white/20 px-3 py-1 rounded-lg">
+                              <Crown className="h-4 w-4" />
+                              <span className="text-sm font-medium">Admin</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Room Content */}
+                        <div className="p-4">
+                          {/* Status and Info */}
+                          <div className="flex items-center justify-between mb-4">
+                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${status.bg} ${status.color}`}>
+                              {status.text}
+                            </span>
+                            
+                            <div className="flex items-center space-x-1 text-gray-500 text-sm">
+                              <Users className="h-4 w-4" />
+                              <span>{room.participants?.length || 0}/{room.maxParticipants}</span>
+                            </div>
+                          </div>
+
+                          {/* Room Details */}
+                          <div className="space-y-2 mb-4">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Chủ phòng:</span>
+                              <span className="font-medium">{room.hostName}</span>
+                            </div>
+                            
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Tạo lúc:</span>
+                              <span className="font-medium">{formatDate(room.createdAt)}</span>
+                            </div>
+                            
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-gray-600">Cài đặt:</span>
+                              <div className="flex items-center space-x-1">
+                                {room.allowScreenShare && <Monitor className="h-4 w-4 text-green-500" />}
+                                {room.allowChat && <ChatIcon className="h-4 w-4 text-green-500" />}
+                                {room.isPrivate && <Lock className="h-4 w-4 text-red-500" />}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => toggleRoomLock(room.id, room.isLocked)}
+                              className={`flex-1 py-2 px-4 rounded-lg transition-colors text-sm font-medium ${
+                                room.isLocked 
+                                  ? 'bg-green-500 text-white hover:bg-green-600' 
+                                  : 'bg-red-500 text-white hover:bg-red-600'
+                              }`}
+                            >
+                              {room.isLocked ? 'Mở khóa' : 'Khóa phòng'}
+                            </button>
+                            
+                            <button
+                              onClick={() => deleteRoom(room.id)}
+                              className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                              title="Xóa phòng"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!loading && filteredRooms.length === 0 && (
+                <div className="text-center py-12">
+                  <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Video className="h-12 w-12 text-gray-400" />
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-800 mb-2">Không có phòng nào</h3>
+                  <p className="text-gray-600 mb-4">Hãy tạo phòng họp đầu tiên</p>
+                  <button
+                    onClick={() => setShowCreateRoomModal(true)}
+                    className="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-3 rounded-xl hover:from-purple-700 hover:to-blue-700 transition-all duration-200 shadow-lg"
+                  >
+                    Tạo phòng mới
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Database Tab */}
           {activeTab === 'database' && (
             <div className="bg-white rounded-2xl shadow-lg p-8">
@@ -544,7 +852,7 @@ const AdminDashboard = () => {
           )}
 
           {/* Other tabs */}
-          {activeTab !== 'overview' && activeTab !== 'database' && (
+          {activeTab !== 'overview' && activeTab !== 'database' && activeTab !== 'rooms' && (
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <div className="text-center">
                 <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -559,6 +867,102 @@ const AdminDashboard = () => {
           )}
         </div>
       </div>
+
+      {/* Create Room Modal */}
+      {showCreateRoomModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4">Tạo phòng họp mới</h2>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tên phòng</label>
+                  <input
+                    type="text"
+                    value={newRoom.name}
+                    onChange={(e) => setNewRoom(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Nhập tên phòng..."
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Mô tả</label>
+                  <textarea
+                    value={newRoom.description}
+                    onChange={(e) => setNewRoom(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    rows="3"
+                    placeholder="Mô tả phòng họp..."
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Số người tối đa</label>
+                  <input
+                    type="number"
+                    value={newRoom.maxParticipants}
+                    onChange={(e) => setNewRoom(prev => ({ ...prev, maxParticipants: parseInt(e.target.value) }))}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    min="2"
+                    max="100"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={newRoom.isPrivate}
+                      onChange={(e) => setNewRoom(prev => ({ ...prev, isPrivate: e.target.checked }))}
+                      className="rounded mr-2"
+                    />
+                    <span className="text-sm text-gray-700">Phòng riêng tư</span>
+                  </label>
+                  
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={newRoom.allowScreenShare}
+                      onChange={(e) => setNewRoom(prev => ({ ...prev, allowScreenShare: e.target.checked }))}
+                      className="rounded mr-2"
+                    />
+                    <span className="text-sm text-gray-700">Cho phép chia sẻ màn hình</span>
+                  </label>
+                  
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={newRoom.allowChat}
+                      onChange={(e) => setNewRoom(prev => ({ ...prev, allowChat: e.target.checked }))}
+                      className="rounded mr-2"
+                    />
+                    <span className="text-sm text-gray-700">Cho phép chat</span>
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-3 mt-6">
+                <button
+                  onClick={createRoom}
+                  disabled={!newRoom.name.trim()}
+                  className="flex-1 bg-gradient-to-r from-purple-600 to-blue-600 text-white py-2 px-4 rounded-lg hover:from-purple-700 hover:to-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all duration-200 font-medium"
+                >
+                  Tạo phòng
+                </button>
+                
+                <button
+                  onClick={() => setShowCreateRoomModal(false)}
+                  className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  Hủy
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
