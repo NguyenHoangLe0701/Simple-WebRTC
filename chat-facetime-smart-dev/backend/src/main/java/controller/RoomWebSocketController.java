@@ -22,8 +22,9 @@ public class RoomWebSocketController {
     @Autowired
     private RoomService roomService;
     
-    // Track active users per room: roomId -> Set<userId>
-    private final Map<String, Set<UserPresence>> activeUsers = new ConcurrentHashMap<>();
+    // Track active users per room: roomId -> Map<userId, UserPresence>
+    // Using Map instead of Set to ensure unique userId tracking
+    private final Map<String, Map<String, UserPresence>> activeUsers = new ConcurrentHashMap<>();
     
     public static class UserPresence {
         public String userId;
@@ -38,6 +39,19 @@ public class RoomWebSocketController {
             this.fullName = fullName;
             this.status = "online";
             this.lastSeen = System.currentTimeMillis();
+        }
+        
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            UserPresence that = (UserPresence) o;
+            return userId != null && userId.equals(that.userId);
+        }
+        
+        @Override
+        public int hashCode() {
+            return userId != null ? userId.hashCode() : 0;
         }
     }
     
@@ -120,14 +134,28 @@ public class RoomWebSocketController {
                     // User can join directly
                     roomService.joinRoom(roomId, joinDto);
                     
-                    // Add to active users
-                    activeUsers.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet())
-                        .add(new UserPresence(userId, username, fullName));
+                    // Add to active users using Map to ensure unique userId
+                    Map<String, UserPresence> roomUsers = activeUsers.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>());
                     
-                    System.out.println("=== USER JOINED ROOM ===");
-                    System.out.println("Room: " + roomId);
-                    System.out.println("User: " + userId + " (" + fullName + ")");
-                    System.out.println("Active users in room: " + activeUsers.get(roomId).size());
+                    // Check if user already exists, update if so
+                    if (roomUsers.containsKey(userId)) {
+                        System.out.println("User " + userId + " already in room, updating presence");
+                        UserPresence existing = roomUsers.get(userId);
+                        existing.lastSeen = System.currentTimeMillis();
+                        existing.status = "online";
+                    } else {
+                        roomUsers.put(userId, new UserPresence(userId, username, fullName));
+                        System.out.println("=== NEW USER JOINED ROOM ===");
+                        System.out.println("Room: " + roomId);
+                        System.out.println("User ID: " + userId);
+                        System.out.println("Username: " + username);
+                        System.out.println("Full Name: " + fullName);
+                    }
+                    
+                    System.out.println("Total active users in room " + roomId + ": " + roomUsers.size());
+                    roomUsers.forEach((uid, presence) -> {
+                        System.out.println("  - User: " + uid + " (" + presence.fullName + ")");
+                    });
                     
                     // Notify user they're approved
                     Map<String, Object> approvedStatus = new HashMap<>();
@@ -178,9 +206,10 @@ public class RoomWebSocketController {
             String username = (String) payload.get("username");
             String fullName = (String) payload.get("fullName");
             
-            // Add to active users
-            activeUsers.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet())
-                .add(new UserPresence(targetUserId, username, fullName));
+            // Add to active users using Map
+            Map<String, UserPresence> roomUsers = activeUsers.computeIfAbsent(roomId, k -> new ConcurrentHashMap<>());
+            roomUsers.put(targetUserId, new UserPresence(targetUserId, username, fullName));
+            System.out.println("Approved user " + targetUserId + " added to room " + roomId);
             
             // Notify user they're approved
             Map<String, Object> approvedStatus = new HashMap<>();
@@ -255,9 +284,12 @@ public class RoomWebSocketController {
                 System.out.println("Room: " + roomId);
                 System.out.println("User: " + finalUserId);
                 
-                Set<UserPresence> users = activeUsers.get(roomId);
+                Map<String, UserPresence> users = activeUsers.get(roomId);
                 if (users != null) {
-                    users.removeIf(u -> u.userId.equals(finalUserId));
+                    UserPresence removed = users.remove(finalUserId);
+                    if (removed != null) {
+                        System.out.println("Removed user " + finalUserId + " from room " + roomId);
+                    }
                     
                     // Send leave notification
                     Map<String, Object> leaveNotification = new HashMap<>();
@@ -267,8 +299,10 @@ public class RoomWebSocketController {
                     
                     if (users.isEmpty()) {
                         activeUsers.remove(roomId);
+                        System.out.println("Room " + roomId + " is now empty, removing from active rooms");
                     } else {
                         // Broadcast updated presence
+                        System.out.println("Remaining users in room: " + users.size());
                         broadcastPresence(roomId);
                     }
                 }
@@ -294,10 +328,10 @@ public class RoomWebSocketController {
     }
     
     private void broadcastPresence(String roomId) {
-        Set<UserPresence> users = activeUsers.getOrDefault(roomId, Collections.emptySet());
+        Map<String, UserPresence> usersMap = activeUsers.getOrDefault(roomId, Collections.emptyMap());
         List<Map<String, Object>> userList = new ArrayList<>();
         
-        for (UserPresence user : users) {
+        for (UserPresence user : usersMap.values()) {
             Map<String, Object> userMap = new HashMap<>();
             userMap.put("id", user.userId);
             userMap.put("username", user.username);
@@ -308,13 +342,14 @@ public class RoomWebSocketController {
         
         Map<String, Object> presence = new HashMap<>();
         presence.put("users", userList);
-        presence.put("count", users.size());
+        presence.put("count", usersMap.size());
         presence.put("roomId", roomId);
         
         System.out.println("=== BROADCASTING PRESENCE ===");
         System.out.println("Room: " + roomId);
-        System.out.println("Users count: " + users.size());
-        System.out.println("Users: " + userList);
+        System.out.println("Users count: " + usersMap.size());
+        System.out.println("User IDs: " + usersMap.keySet());
+        userList.forEach(u -> System.out.println("  - " + u.get("id") + ": " + u.get("fullName")));
         
         messagingTemplate.convertAndSend("/topic/presence/" + roomId, presence);
     }
@@ -324,9 +359,16 @@ public class RoomWebSocketController {
         long now = System.currentTimeMillis();
         long timeout = 60000; // 1 minute
         
-        activeUsers.forEach((roomId, users) -> {
-            users.removeIf(user -> (now - user.lastSeen) > timeout);
-            if (users.isEmpty()) {
+        activeUsers.forEach((roomId, usersMap) -> {
+            usersMap.entrySet().removeIf(entry -> {
+                UserPresence user = entry.getValue();
+                boolean isStale = (now - user.lastSeen) > timeout;
+                if (isStale) {
+                    System.out.println("Removing stale user: " + user.userId + " from room " + roomId);
+                }
+                return isStale;
+            });
+            if (usersMap.isEmpty()) {
                 activeUsers.remove(roomId);
             } else {
                 broadcastPresence(roomId);

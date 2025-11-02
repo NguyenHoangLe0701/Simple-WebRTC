@@ -103,13 +103,16 @@ const ChatRoom = () => {
         
         console.log('Socket connected, joining room:', roomId);
         
-        // Join room with user info
+        // Join room with user info - ensure userId is unique and always sent
+        const userId = currentUser?.id || currentUser?.userId || currentUser?.username || username;
+        console.log('Joining room with userId:', userId, 'username:', username);
+        
         socketService.joinRoom(roomId, username, {
-          id: currentUser?.id,
-          userId: currentUser?.id,
-          fullName: currentUser?.fullName,
-          name: currentUser?.fullName || currentUser?.username,
-          email: currentUser?.email
+          id: userId,
+          userId: userId,
+          fullName: currentUser?.fullName || username,
+          name: currentUser?.fullName || currentUser?.username || username,
+          email: currentUser?.email || ''
         });
         
         // Wait a bit for join to complete before subscribing
