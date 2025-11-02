@@ -107,6 +107,45 @@ class SocketService {
   subscribeToPresence(roomId, callback) {
     return this.subscribe(`/topic/presence/${roomId}`, callback);
   }
+
+  // Subscribe to approval events (for host)
+  subscribeToApproval(roomId, callback) {
+    return this.subscribe(`/topic/room/${roomId}/approval`, callback);
+  }
+
+  // Subscribe to approval status (for user waiting)
+  subscribeToApprovalStatus(userId, callback) {
+    // Use user-specific destination for approval status
+    return this.subscribe(`/user/queue/approval-status`, callback);
+  }
+
+  // Send approval request
+  requestApproval(roomId, userData) {
+    this.send(`/app/room/${roomId}/join`, {
+      userId: userData.id,
+      username: userData.username,
+      fullName: userData.fullName,
+      email: userData.email
+    });
+  }
+
+  // Approve user (host only)
+  approveUser(roomId, userId, hostId, userInfo) {
+    this.send(`/app/room/${roomId}/approve`, {
+      userId: userId,
+      hostId: hostId,
+      username: userInfo.username,
+      fullName: userInfo.fullName
+    });
+  }
+
+  // Reject user (host only)
+  rejectUser(roomId, userId, hostId) {
+    this.send(`/app/room/${roomId}/reject`, {
+      userId: userId,
+      hostId: hostId
+    });
+  }
 }
 
 // Create singleton instance

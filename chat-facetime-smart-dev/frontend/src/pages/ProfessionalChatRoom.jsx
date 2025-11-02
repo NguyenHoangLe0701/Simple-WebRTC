@@ -31,6 +31,7 @@ import ProfessionalWaitingRoom from '../components/ProfessionalWaitingRoom';
 import ProfessionalVideoCall from '../components/ProfessionalVideoCall';
 import ProfessionalRoomManager from '../components/ProfessionalRoomManager';
 import AIAssistant from '../components/AIAssistant';
+import RoomApprovalOverlay from '../components/RoomApprovalOverlay';
 import socketService from '../services/socket';
 import api from '../services/api';
 
@@ -52,6 +53,7 @@ const ProfessionalChatRoom = () => {
   const [isVideoCall, setIsVideoCall] = useState(false);
   const [isVoiceCall, setIsVoiceCall] = useState(false);
   const [showRoomManager, setShowRoomManager] = useState(false);
+  const [showApprovalOverlay, setShowApprovalOverlay] = useState(false);
   const [typingUsers, setTypingUsers] = useState({});
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [replyTo, setReplyTo] = useState(null);
@@ -92,8 +94,15 @@ const ProfessionalChatRoom = () => {
       
       // Check if user is approved or if it's a default room
       const defaultRooms = ['general', 'team', 'random', 'webrtc', 'support'];
-      if (defaultRooms.includes(roomId) || response.data.approvedUsers?.includes(currentUser.id)) {
+      const isDefaultRoom = defaultRooms.includes(roomId);
+      const isApprovedUser = response.data.approvedUsers?.includes(currentUser.id);
+      const isPublicRoom = !response.data.isPrivate;
+      
+      if (isDefaultRoom || isApprovedUser || isPublicRoom || response.data.hostId === currentUser.id) {
         setIsApproved(true);
+      } else {
+        // Show approval overlay for private rooms
+        setShowApprovalOverlay(true);
       }
     } catch (error) {
       console.error('Error checking room access:', error);
@@ -101,6 +110,9 @@ const ProfessionalChatRoom = () => {
       const defaultRooms = ['general', 'team', 'random', 'webrtc', 'support'];
       if (defaultRooms.includes(roomId)) {
         setIsApproved(true);
+      } else {
+        // Show approval overlay if room needs approval
+        setShowApprovalOverlay(true);
       }
     }
   };
@@ -264,12 +276,15 @@ const ProfessionalChatRoom = () => {
   };
 
   // Show waiting room if not approved
-  if (!isApproved) {
+  if (!isApproved && !showApprovalOverlay) {
     return (
       <ProfessionalWaitingRoom 
         roomId={roomId}
         currentUser={currentUser}
-        onApproved={() => setIsApproved(true)}
+        onApproved={() => {
+          setIsApproved(true);
+          setShowApprovalOverlay(false);
+        }}
         onRejected={() => navigate('/rooms')}
       />
     );
@@ -290,7 +305,33 @@ const ProfessionalChatRoom = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <>
+      {/* Approval Overlay */}
+      {showApprovalOverlay && (
+        <RoomApprovalOverlay
+          roomId={roomId}
+          currentUser={currentUser}
+          isHost={isHost}
+          onApproved={() => {
+            setIsApproved(true);
+            setShowApprovalOverlay(false);
+          }}
+          onRejected={() => navigate('/rooms')}
+          onClose={() => setShowApprovalOverlay(false)}
+        />
+      )}
+
+      {/* Video Call Overlay */}
+      {isVideoCall && (
+        <ProfessionalVideoCall
+          roomId={roomId}
+          currentUser={currentUser}
+          isHost={isHost}
+          onEndCall={() => setIsVideoCall(false)}
+        />
+      )}
+
+      <div className="flex h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Sidebar */}
       <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
         {/* Room Header */}
@@ -309,9 +350,19 @@ const ProfessionalChatRoom = () => {
             </div>
             
             {isHost && (
-              <div className="flex items-center space-x-1 bg-yellow-100 text-yellow-800 px-2 py-1 rounded-lg">
-                <Crown className="h-4 w-4" />
-                <span className="text-xs font-medium">Chủ phòng</span>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowApprovalOverlay(true)}
+                  className="flex items-center space-x-1 bg-yellow-100 text-yellow-800 px-2 py-1 rounded-lg hover:bg-yellow-200 transition-colors"
+                  title="Xem yêu cầu tham gia phòng"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  <span className="text-xs font-medium">Yêu cầu</span>
+                </button>
+                <div className="flex items-center space-x-1 bg-yellow-100 text-yellow-800 px-2 py-1 rounded-lg">
+                  <Crown className="h-4 w-4" />
+                  <span className="text-xs font-medium">Chủ phòng</span>
+                </div>
               </div>
             )}
           </div>
@@ -586,25 +637,15 @@ const ProfessionalChatRoom = () => {
       />
 
       {/* AI Assistant */}
-      <AIAssistant 
-        isOpen={showAIAssistant} 
-        onClose={() => setShowAIAssistant(false)} 
-        onMinimize={() => {}} 
-      />
-
-      {/* Video Call */}
-      <ProfessionalVideoCall 
-        isActive={isVideoCall || isVoiceCall} 
-        mode={isVoiceCall ? 'audio' : 'video'} 
-        onEndCall={() => { 
-          setIsVideoCall(false); 
-          setIsVoiceCall(false); 
-        }} 
-        roomId={roomId}
-        currentUser={currentUser}
-        isHost={isHost}
-      />
+      {showAIAssistant && (
+        <AIAssistant 
+          isOpen={showAIAssistant} 
+          onClose={() => setShowAIAssistant(false)} 
+          onMinimize={() => {}} 
+        />
+      )}
     </div>
+    </>
   );
 };
 
