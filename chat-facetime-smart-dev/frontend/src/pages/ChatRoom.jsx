@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Send, 
   Phone, 
@@ -23,7 +23,7 @@ import {
   LogOut
 } from 'lucide-react';
 import AIAssistant from '../components/AIAssistant';
-import VideoCall from '../components/VideoCall';
+import EnhancedVideoCall from '../components/EnhancedVideoCall';
 import CodeEditor from '../components/CodeEditor';
 import { Virtuoso } from 'react-virtuoso';
 import socketService from '../services/socket';
@@ -31,6 +31,7 @@ import socketService from '../services/socket';
 
 const ChatRoom = () => {
   const { roomId = 'general' } = useParams();
+  const navigate = useNavigate();
   const currentUser = useMemo(() => {
     try {
       const raw = localStorage.getItem('user');
@@ -71,34 +72,97 @@ const ChatRoom = () => {
   const dropRef = useRef(null);
 
   useEffect(() => {
-    let chatSub, presenceSub;
+    // Reset messages when changing rooms
+    setMessages([]);
+    setOnlineUsers([]);
+    
+    let chatSub, presenceSub, signalSub;
     const username = currentUser?.fullName || currentUser?.username || 'User';
+    
     (async () => {
       if (!socketService.isConnected) {
-        try { await socketService.connect(); } catch (e) { console.error(e); }
+        try { 
+          await socketService.connect(); 
+        } catch (e) { 
+          console.error('Socket connection error:', e); 
+        }
       }
       setIsConnected(socketService.isConnected);
-      // Join room and subscribe
-      socketService.joinRoom(roomId, username);
+      
+      // Join room with user info
+      socketService.joinRoom(roomId, username, {
+        id: currentUser?.id,
+        userId: currentUser?.id,
+        fullName: currentUser?.fullName,
+        name: currentUser?.fullName || currentUser?.username,
+        email: currentUser?.email
+      });
+      
+      // Subscribe to chat messages
       chatSub = socketService.subscribeToChat(roomId, (messageFrame) => {
         try {
           const payload = JSON.parse(messageFrame.body);
-          setMessages(prev => [...prev, payload]);
-        } catch {}
+          setMessages(prev => {
+            // Avoid duplicates
+            if (prev.find(m => m.id === payload.id)) return prev;
+            return [...prev, payload];
+          });
+        } catch (e) {
+          console.error('Error parsing chat message:', e);
+        }
       });
+      
+      // Subscribe to presence updates
       presenceSub = socketService.subscribeToPresence(roomId, (messageFrame) => {
         try {
           const payload = JSON.parse(messageFrame.body);
           if (payload?.users) {
-            setOnlineUsers(payload.users.map(u => ({ id: u.id || u.username, name: u.fullName || u.username, avatar: (u.fullName || u.username || 'U').charAt(0).toUpperCase(), status: u.status || 'online' })));
+            const usersList = payload.users.map(u => ({ 
+              id: u.id || u.username, 
+              name: u.fullName || u.username, 
+              avatar: (u.fullName || u.username || 'U').charAt(0).toUpperCase(), 
+              status: u.status || 'online' 
+            }));
+            // Always include current user in the list
+            const currentUserInList = usersList.find(u => u.id === (currentUser?.id || currentUser?.username));
+            if (!currentUserInList && currentUser) {
+              usersList.push({
+                id: currentUser.id || currentUser.username,
+                name: currentUser.fullName || currentUser.username,
+                avatar: (currentUser.fullName || currentUser.username || 'U').charAt(0).toUpperCase(),
+                status: 'online'
+              });
+            }
+            setOnlineUsers(usersList);
           }
-        } catch {}
+        } catch (e) {
+          console.error('Error parsing presence message:', e);
+        }
+      });
+      
+      // Subscribe to signaling for video calls
+      signalSub = socketService.subscribeToSignaling(roomId, (frame) => {
+        try {
+          const data = JSON.parse(frame.body);
+          // Handle join/leave events for presence
+          if (data.type === 'join' || data.type === 'leave') {
+            // Presence will be updated via presence subscription
+          }
+        } catch (e) {
+          console.error('Error parsing signaling message:', e);
+        }
       });
     })();
+    
     return () => {
-      try { socketService.leaveRoom(roomId, username); } catch {}
+      try { 
+        socketService.leaveRoom(roomId, username); 
+      } catch (e) {
+        console.error('Error leaving room:', e);
+      }
       if (chatSub) socketService.unsubscribe(`/topic/chat/${roomId}`);
       if (presenceSub) socketService.unsubscribe(`/topic/presence/${roomId}`);
+      if (signalSub) socketService.unsubscribe(`/topic/room/${roomId}`);
     };
   }, [roomId, currentUser]);
 
@@ -129,25 +193,33 @@ const ChatRoom = () => {
   // Virtuoso handles scrolling efficiently; no manual scrolling needed
 
   const sendMessage = () => {
-    if (newMessage.trim()) {
-      const message = {
-        id: Date.now(),
-        sender: currentUser?.fullName || currentUser?.username || 'You',
-        content: newMessage,
-        timestamp: new Date(),
-        type: 'text',
-        avatar: (currentUser?.fullName || currentUser?.username || 'Y').charAt(0).toUpperCase(),
-        replyTo: replyTo ? { id: replyTo.id, sender: replyTo.sender, preview: String(replyTo.content).slice(0, 100) } : undefined,
-        reactions: {}
-      };
-      // Optimistic update and emit over socket
-      setMessages(prev => [...prev, message]);
-      if (socketService.isConnected) {
-        socketService.sendMessage(roomId, message);
-      }
-      setNewMessage('');
-      setReplyTo(null);
+    if (!newMessage.trim()) return;
+    
+    const message = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      sender: currentUser?.fullName || currentUser?.username || 'You',
+      senderId: currentUser?.id || currentUser?.username,
+      content: newMessage,
+      timestamp: new Date().toISOString(),
+      type: 'text',
+      roomId: roomId,
+      avatar: (currentUser?.fullName || currentUser?.username || 'Y').charAt(0).toUpperCase(),
+      replyTo: replyTo ? { id: replyTo.id, sender: replyTo.sender, preview: String(replyTo.content).slice(0, 100) } : undefined,
+      reactions: {}
+    };
+    
+    // Optimistic update
+    setMessages(prev => [...prev, message]);
+    
+    // Send via socket
+    if (socketService.isConnected) {
+      socketService.sendMessage(roomId, message);
+    } else {
+      console.warn('Socket not connected, message not sent');
     }
+    
+    setNewMessage('');
+    setReplyTo(null);
   };
 
   const sendCode = (codeData) => {
@@ -286,7 +358,11 @@ const ChatRoom = () => {
           <h2 className="text-xs font-semibold text-gray-500 mb-2">Kênh</h2>
           <div className="space-y-1 max-h-56 overflow-y-auto">
             {["general","team","random","webrtc","support"].filter(c=>c.includes(sidebarQuery.toLowerCase())).map((c) => (
-              <div key={c} className={`px-3 py-2 rounded-lg cursor-pointer ${c===roomId? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'}`}>
+              <div 
+                key={c} 
+                onClick={() => navigate(`/chat/${c}`)}
+                className={`px-3 py-2 rounded-lg cursor-pointer transition-colors ${c===roomId? 'bg-blue-50 text-blue-700 font-medium' : 'hover:bg-gray-50 text-gray-700'}`}
+              >
                 #{c}
               </div>
             ))}
@@ -325,13 +401,28 @@ const ChatRoom = () => {
       <div ref={dropRef} className="flex-1 flex flex-col">
         {/* Chat Header */}
         <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-6 ">
-            <div className="w-14 h-12   rounded-full flex items-center justify-center  font-medium ">
-             <img src="images/icons/icon-cloudy.png" alt="Admin" className="ml-5 h-12 w-26 rounded-full object-contain" />
-             </div>
+          <div className="flex items-center space-x-4">
+            <div className="w-12 h-12 rounded-full flex items-center justify-center">
+              <img 
+                src="/images/icons/icon-cloudy.png" 
+                alt="Room" 
+                className="w-10 h-10 object-contain" 
+                onError={(e) => {
+                  // Fallback if image not found
+                  e.target.style.display = 'none';
+                  e.target.nextSibling.style.display = 'flex';
+                }}
+              />
+              <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full items-center justify-center text-white font-bold hidden">
+                {roomId.charAt(0).toUpperCase()}
+              </div>
+            </div>
             <div>
-              <h2 className="font-semibold">Phòng: {roomId}</h2>
-              <p className="text-sm text-gray-500">{onlineUsers.length} thành viên</p>
+              <h2 className="font-semibold text-gray-800">Phòng: {roomId}</h2>
+              <p className="text-sm text-gray-500">
+                {onlineUsers.length > 0 ? onlineUsers.length : 1} thành viên
+                {isConnected && <span className="ml-2 text-green-500">• Đã kết nối</span>}
+              </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
@@ -342,56 +433,78 @@ const ChatRoom = () => {
                 </div>
                 <span className="text-sm font-medium hidden sm:block">{currentUser?.fullName || currentUser?.username || 'User'}</span>
               </div>
-              {/* <div className="absolute right-0 mt-2 w-40 bg-white border border-gray-200 rounded-md shadow-lg opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition"> */}
-                {/* <button
-                  onClick={() => {
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('user');
-                    window.location.href = '/';
-                  }}
-                  className="w-full flex items-center space-x-2 px-3 py-2 text-left text-sm hover:bg-gray-100"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Đăng xuất</span>
-                </button> */}
-              {/* </div> */}
             </div>
-            <button onClick={() => setShowAIAssistant(!showAIAssistant)} className={`p-2 rounded-lg ${showAIAssistant ? 'bg-purple-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`} title="AI Assistant">
+            <button 
+              onClick={() => setShowAIAssistant(!showAIAssistant)} 
+              className={`p-2 rounded-lg transition-colors ${showAIAssistant ? 'bg-purple-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`} 
+              title="AI Assistant"
+            >
               <Bot className="h-5 w-5" />
             </button>
-            <button onClick={() => setIsVoiceCall(true)} className={`p-2 rounded-lg ${isVoiceCall ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>
+            <button 
+              onClick={() => {
+                setIsVoiceCall(true);
+                setIsVideoCall(false);
+              }} 
+              className={`p-2 rounded-lg transition-colors ${isVoiceCall ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              title="Gọi thoại"
+            >
               <Phone className="h-5 w-5" />
             </button>
-            <button onClick={() => setIsVideoCall(true)} className={`p-2 rounded-lg ${isVideoCall ? 'bg-red-500 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}>
+            <button 
+              onClick={() => {
+                setIsVideoCall(true);
+                setIsVoiceCall(false);
+              }} 
+              className={`p-2 rounded-lg transition-colors ${isVideoCall ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              title="Gọi video"
+            >
               <Video className="h-5 w-5" />
             </button>
           </div>
         </div>
 
         {/* Messages (virtualized) */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-gray-50">
           {/* Quick search inline */}
           {sidebarQuery && (
-            <div className="px-4 py-2 text-xs text-gray-500">Kết quả cho: "{sidebarQuery}"</div>
+            <div className="px-4 py-2 text-xs text-gray-500 bg-white border-b">Kết quả cho: "{sidebarQuery}"</div>
           )}
-          <Virtuoso
-            ref={listRef}
-            data={messages.filter(m =>
-              !sidebarQuery || String(m.content).toLowerCase().includes(sidebarQuery.toLowerCase())
-            )}
-            itemContent={(index, message) => {
-              const isOwn = (currentUser?.fullName || currentUser?.username || 'You') === message.sender;
-              return (
-                <div className="px-4 py-2 group">
-                  <div className={`flex items-end ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                    {!isOwn && (
-                      <div className="mr-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">{message.avatar}</div>
-                    )}
-                    <div className={`max-w-[72%] ${isOwn ? 'text-right' : 'text-left'}`}>
-                      <div className="mb-1 flex items-center gap-2 text-xs text-gray-500">
-                        {!isOwn && <span className="font-medium text-gray-700">{message.sender}</span>}
-                        <span>{formatTime(message.timestamp)}</span>
-                      </div>
+          
+          {messages.length === 0 && !sidebarQuery && (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center text-gray-400">
+                <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Send className="h-8 w-8 text-gray-400" />
+                </div>
+                <p className="text-lg font-medium">Chưa có tin nhắn nào</p>
+                <p className="text-sm mt-2">Hãy bắt đầu cuộc trò chuyện!</p>
+              </div>
+            </div>
+          )}
+          
+          {messages.length > 0 && (
+            <Virtuoso
+              ref={listRef}
+              data={messages.filter(m =>
+                !sidebarQuery || String(m.content).toLowerCase().includes(sidebarQuery.toLowerCase())
+              )}
+              itemContent={(index, message) => {
+                const isOwn = (currentUser?.id || currentUser?.username) === (message.senderId || message.sender) ||
+                             (currentUser?.fullName || currentUser?.username || 'You') === message.sender;
+                return (
+                  <div className="px-4 py-2 group">
+                    <div className={`flex items-end ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                      {!isOwn && (
+                        <div className="mr-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+                          {message.avatar}
+                        </div>
+                      )}
+                      <div className={`max-w-[72%] ${isOwn ? 'text-right' : 'text-left'}`}>
+                        <div className={`mb-1 flex items-center gap-2 text-xs ${isOwn ? 'justify-end' : 'justify-start'} text-gray-500`}>
+                          {!isOwn && <span className="font-medium text-gray-700">{message.sender}</span>}
+                          <span>{formatTime(message.timestamp)}</span>
+                        </div>
                       {message.type === 'text' && (
                         <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
                           {message.replyTo && (
@@ -481,6 +594,7 @@ const ChatRoom = () => {
             }}
             followOutput={true}
           />
+          )}
         </div>
 
         {/* Selected image previews */}
@@ -556,7 +670,16 @@ const ChatRoom = () => {
       <AIAssistant isOpen={showAIAssistant} onClose={() => setShowAIAssistant(false)} onMinimize={() => setIsAIMinimized(!isAIMinimized)} />
 
       {/* Video Call */}
-      <VideoCall isActive={isVideoCall} onEndCall={()=>{ setIsVideoCall(false); setIsVoiceCall(false); setIsScreenSharing(false); }} roomId={roomId} />
+      <EnhancedVideoCall 
+        isActive={isVideoCall || isVoiceCall} 
+        onEndCall={()=>{ 
+          setIsVideoCall(false); 
+          setIsVoiceCall(false); 
+          setIsScreenSharing(false); 
+        }} 
+        roomId={roomId}
+        currentUser={currentUser}
+      />
     </div>
   );
 };

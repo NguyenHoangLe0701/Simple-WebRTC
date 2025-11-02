@@ -77,8 +77,14 @@ class SocketService {
   }
 
   // Chat specific methods
-  joinRoom(roomId, username) {
-    this.send(`/app/room/${roomId}/join`, { username });
+  joinRoom(roomId, username, userData = {}) {
+    const payload = { 
+      username,
+      userId: userData?.id || userData?.userId || username,
+      fullName: userData?.fullName || userData?.name || username,
+      email: userData?.email || ''
+    };
+    this.send(`/app/room/${roomId}/join`, payload);
   }
 
   leaveRoom(roomId, username) {
