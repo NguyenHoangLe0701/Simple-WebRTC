@@ -11,7 +11,11 @@ import model.ChatMessage;
 @Controller
 public class SignalingController {
   private final SimpMessagingTemplate template;
-  public SignalingController(SimpMessagingTemplate template) { this.template = template; }
+  
+  public SignalingController(SimpMessagingTemplate template) { 
+    this.template = template;
+    System.out.println("🚀 SignalingController initialized");
+  }
 
   // signaling messages published to /app/signal/{room}
   @MessageMapping("/signal/{roomId}")
@@ -24,6 +28,7 @@ public class SignalingController {
   public void chat(@DestinationVariable String roomId, @Payload Object msgPayload) {
     // Handle both ChatMessage objects and Map<String, Object> from frontend
     try {
+      System.out.println("========================================");
       System.out.println("=== CHAT MESSAGE RECEIVED ===");
       System.out.println("Room: " + roomId);
       System.out.println("Payload type: " + msgPayload.getClass().getName());
@@ -36,15 +41,22 @@ public class SignalingController {
         System.out.println("Sender: " + msgMap.get("sender"));
         System.out.println("Content: " + msgMap.get("content"));
         System.out.println("Sender ID: " + msgMap.get("senderId"));
+        System.out.println("Room ID: " + msgMap.get("roomId"));
       }
       
       // Forward the message to all subscribers in the room
-      template.convertAndSend("/topic/chat/" + roomId, msgPayload);
+      String destination = "/topic/chat/" + roomId;
+      System.out.println("Broadcasting to destination: " + destination);
       
-      System.out.println("✅ Message broadcasted to /topic/chat/" + roomId);
+      template.convertAndSend(destination, msgPayload);
+      
+      System.out.println("✅ Message broadcasted to " + destination);
       System.out.println("All subscribers in room should receive this message");
+      System.out.println("========================================");
     } catch (Exception e) {
       System.err.println("❌ Error broadcasting chat message: " + e.getMessage());
+      e.printStackTrace();
+      System.err.println("Stack trace:");
       e.printStackTrace();
     }
   }

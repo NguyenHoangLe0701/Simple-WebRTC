@@ -1,0 +1,86 @@
+# -------------------------
+# Backend / Java / Spring Boot
+# -------------------------
+
+# Maven / Gradle build
+chat-facetime-smart-dev/backend/target/
+chat-facetime-smart-dev/backend/.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE / Editor
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+.idea
+*.iml
+*.iws
+*.ipr
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# VS Code
+.vscode/
+
+# -------------------------
+# Backend local environment / secrets
+# -------------------------
+chat-facetime-smart-dev/backend/.env
+chat-facetime-smart-dev/backend/.env.local
+chat-facetime-smart-dev/backend/.env.cloud
+
+# Docker MySQL data
+chat-facetime-smart-dev/backend/mysql_data/
+chat-facetime-smart-dev/backend/mysql_data/*
+chat-facetime-smart-dev/docker/.env
+chat-facetime-smart-dev/docker/mysql_data/
+chat-facetime-smart-dev/docker/mysql_data/*
+
+# Logs
+logs
+*.log
+
+# -------------------------
+# Frontend / Node / React
+# -------------------------
+# Node modules & build
+chat-facetime-smart-dev/frontend/node_modules/
+chat-facetime-smart-dev/frontend/dist/
+chat-facetime-smart-dev/frontend/dist-ssr/
+
+# Frontend environment files (nếu có)
+chat-facetime-smart-dev/frontend/.env
+chat-facetime-smart-dev/frontend/.env.local
+chat-facetime-smart-dev/frontend/.env.cloud
+
+# Editor directories and files
+chat-facetime-smart-dev/frontend/.vscode/*
+!chat-facetime-smart-dev/frontend/.vscode/extensions.json
+
+# npm / yarn / pnpm logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS / misc
+.DS_Store
+*.local
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
