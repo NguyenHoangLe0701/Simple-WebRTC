@@ -56,9 +56,7 @@ const ChatRoom = () => {
   const [codeLanguage, setCodeLanguage] = useState('javascript');
   const [showAIAssistant, setShowAIAssistant] = useState(false);
   const [isAIMinimized, setIsAIMinimized] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([
-    { id: 1, name: 'Admin', avatar: 'A', status: 'online' },
-  ]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [sidebarQuery, setSidebarQuery] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -617,6 +615,19 @@ const ChatRoom = () => {
                 {onlineUsers.length > 0 ? onlineUsers.length : 1} thành viên
                 {isConnected && <span className="ml-2 text-green-500">• Đã kết nối</span>}
               </p>
+              {/* Online members strip */}
+              {onlineUsers.length > 0 && (
+                <div className="mt-2 flex items-center gap-2 overflow-x-auto pr-2">
+                  {onlineUsers.map(u => (
+                    <div key={u.id} className="relative group" title={u.name}>
+                      <div className="w-7 h-7 bg-blue-500 rounded-full text-white flex items-center justify-center text-xs font-medium">
+                        {(u.name || 'U').charAt(0).toUpperCase()}
+                      </div>
+                      <span className={`absolute -bottom-0.5 -right-0.5 inline-block w-2.5 h-2.5 rounded-full border-2 border-white ${getStatusColor(u.status)}`} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center space-x-2">
