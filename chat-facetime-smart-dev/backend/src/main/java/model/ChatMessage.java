@@ -3,6 +3,8 @@ package model;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 
 import java.time.LocalDateTime;
 
@@ -19,7 +21,7 @@ public class ChatMessage {
     private LocalDateTime timestamp;
     private String codeLanguage; // For code snippets
     private String fileName; // For file sharing
-    
+
     public enum MessageType {
         TEXT,
         CODE,
@@ -27,6 +29,17 @@ public class ChatMessage {
         IMAGE,
         VIDEO_CALL,
         VOICE_CALL,
-        SYSTEM
+        SYSTEM;
+
+        // 👇 Thêm 2 annotation này để backend tự hiểu "text", "Text", "TEXT" là như nhau
+        @JsonCreator
+        public static MessageType fromValue(String value) {
+            return MessageType.valueOf(value.toUpperCase());
+        }
+
+        @JsonValue
+        public String toValue() {
+            return this.name();
+        }
     }
 }
