@@ -3,7 +3,7 @@ package com.smartchat.chatfacetimesmartdev;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication(scanBasePackages = {"com.smartchat.chatfacetimesmartdev", "controller", "service", "dto", "entity", "repository", "model", "util"})
+@SpringBootApplication(scanBasePackages = {"com.smartchat.chatfacetimesmartdev"})
 public class ChatfacetimesmartdevApplication {
 
 	public static void main(String[] args) {
