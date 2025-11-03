@@ -13,41 +13,49 @@ import dto.UserPresence;
 import dto.RoomJoinDto;
 import dto.RoomCreateDto;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Controller
 public class RoomWebSocketController {
-    
+
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
-    
+
     @Autowired
     private RoomService roomService;
-    
+
     @Autowired
     private PresenceService presenceService;
-    
+
     @MessageMapping("/room/{roomId}/join")
     public void handleJoinRoom(@DestinationVariable String roomId, @Payload Map<String, Object> payload) {
         try {
-            String userId = (String) payload.get("userId") != null ? 
-                (String) payload.get("userId") : (String) payload.get("username");
+            // ✅ Log để xác nhận backend đã nhận được message
+            System.out.println("🚀 handleJoinRoom triggered for room: " + roomId);
+            System.out.println("   Payload: " + payload);
+
+            // ✅ Parse dữ liệu linh hoạt (vì userId có thể là Integer hoặc String)
+            Object rawUserId = payload.get("userId");
+            String userId = null;
+
+            if (rawUserId != null) {
+                userId = rawUserId.toString(); // an toàn cho cả int hoặc string
+            }
+
             String username = (String) payload.get("username");
             String fullName = (String) payload.get("fullName");
             String email = (String) payload.get("email");
-            
+
             if (userId == null && username != null) {
                 userId = username;
             }
             if (fullName == null && username != null) {
                 fullName = username;
             }
-            
-            // Get or create room
+
+            // ✅ Kiểm tra hoặc tạo room nếu chưa tồn tại
             try {
                 roomService.getRoomInfo(roomId);
             } catch (Exception e) {
-                // Room doesn't exist - create public room automatically
                 try {
                     RoomCreateDto createDto = new RoomCreateDto();
                     createDto.setName(roomId);
@@ -60,213 +68,137 @@ public class RoomWebSocketController {
                     createDto.setAllowScreenShare(true);
                     createDto.setAllowChat(true);
                     roomService.createRoom(createDto);
+                    System.out.println("🆕 Auto-created public room: " + roomId);
                 } catch (Exception ex) {
-                    // Room might already exist or other error
                     System.err.println("Error creating room: " + ex.getMessage());
                 }
             }
-            
-            // Try to join room via service
-            try {
-                RoomJoinDto joinDto = new RoomJoinDto();
-                joinDto.setUserId(userId);
-                joinDto.setUsername(username);
-                joinDto.setFullName(fullName);
-                joinDto.setEmail(email);
-                
-                dto.RoomDto roomInfo = roomService.getRoomInfo(roomId);
-                boolean needsApproval = roomInfo.isPrivate() && !roomInfo.getApprovedUsers().contains(userId);
-                
-                if (needsApproval) {
-                    // User needs approval - add to waiting list
-                    roomService.joinRoom(roomId, joinDto);
-                    
-                    // Notify host about new waiting user
-                    Map<String, Object> notification = new HashMap<>();
-                    notification.put("type", "waiting_user_request");
-                    notification.put("user", Map.of(
+
+            // ✅ Thực hiện join
+            RoomJoinDto joinDto = new RoomJoinDto();
+            joinDto.setUserId(userId);
+            joinDto.setUsername(username);
+            joinDto.setFullName(fullName);
+            joinDto.setEmail(email);
+
+            dto.RoomDto roomInfo = roomService.getRoomInfo(roomId);
+            boolean needsApproval = roomInfo.isPrivate() && !roomInfo.getApprovedUsers().contains(userId);
+
+            if (needsApproval) {
+                roomService.joinRoom(roomId, joinDto);
+
+                Map<String, Object> notification = new HashMap<>();
+                notification.put("type", "waiting_user_request");
+                notification.put("user", Map.of(
                         "id", userId,
                         "username", username,
-                        "fullName", fullName != null ? fullName : username,
-                        "email", email != null ? email : ""
-                    ));
-                    notification.put("roomId", roomId);
-                    notification.put("timestamp", System.currentTimeMillis());
-                    
-                    // Send notification to host
-                    messagingTemplate.convertAndSend("/topic/room/" + roomId + "/approval", notification);
-                    
-                    // Send waiting status to user
-                    Map<String, Object> waitingStatus = new HashMap<>();
-                    waitingStatus.put("type", "waiting_approval");
-                    waitingStatus.put("status", "pending");
-                    waitingStatus.put("message", "Đang chờ chủ phòng duyệt...");
-                    messagingTemplate.convertAndSendToUser(userId, "/queue/approval-status", waitingStatus);
-                } else {
-                    // User can join directly
-                    roomService.joinRoom(roomId, joinDto);
-                    
-                    // Update presence store
-                    presenceService.addOrUpdate(roomId, new UserPresence(userId, username, fullName, "online", System.currentTimeMillis()));
-                    
-                    // Notify user they're approved
-                    Map<String, Object> approvedStatus = new HashMap<>();
-                    approvedStatus.put("type", "approved");
-                    approvedStatus.put("status", "approved");
-                    approvedStatus.put("message", "Bạn đã được phép vào phòng!");
-                    messagingTemplate.convertAndSendToUser(userId, "/queue/approval-status", approvedStatus);
-                    
-                    // Broadcast presence update to ALL users in the room
-                    broadcastPresence(roomId);
-                    
-                    // Also send join notification
-                    Map<String, Object> joinNotification = new HashMap<>();
-                    joinNotification.put("type", "join");
-                    joinNotification.put("user", Map.of(
+                        "fullName", fullName,
+                        "email", email
+                ));
+                notification.put("roomId", roomId);
+                notification.put("timestamp", System.currentTimeMillis());
+
+                messagingTemplate.convertAndSend("/topic/room/" + roomId + "/approval", notification);
+
+                Map<String, Object> waitingStatus = new HashMap<>();
+                waitingStatus.put("type", "waiting_approval");
+                waitingStatus.put("status", "pending");
+                waitingStatus.put("message", "Đang chờ chủ phòng duyệt...");
+                messagingTemplate.convertAndSendToUser(userId, "/queue/approval-status", waitingStatus);
+
+            } else {
+                roomService.joinRoom(roomId, joinDto);
+
+                presenceService.addOrUpdate(roomId,
+                        new UserPresence(userId, username, fullName, "online", System.currentTimeMillis()));
+
+                // ✅ Log xác nhận join
+                System.out.println("✅ JOIN MESSAGE RECEIVED for " + fullName + " (" + userId + ") in room " + roomId);
+
+                Map<String, Object> approvedStatus = new HashMap<>();
+                approvedStatus.put("type", "approved");
+                approvedStatus.put("status", "approved");
+                approvedStatus.put("message", "Bạn đã được phép vào phòng!");
+                messagingTemplate.convertAndSendToUser(userId, "/queue/approval-status", approvedStatus);
+
+                broadcastPresence(roomId);
+
+                Map<String, Object> joinNotification = new HashMap<>();
+                joinNotification.put("type", "join");
+                joinNotification.put("user", Map.of(
                         "id", userId,
                         "username", username,
-                        "fullName", fullName != null ? fullName : username
-                    ));
-                    messagingTemplate.convertAndSend("/topic/room/" + roomId, joinNotification);
-                }
-            } catch (Exception e) {
-                // If join fails, still allow WebSocket connection for chat
-                System.err.println("Join room failed, but allowing WebSocket: " + e.getMessage());
+                        "fullName", fullName
+                ));
+                messagingTemplate.convertAndSend("/topic/room/" + roomId, joinNotification);
             }
-            
+
         } catch (Exception e) {
-            System.err.println("Error in handleJoinRoom: " + e.getMessage());
+            System.err.println("❌ Error in handleJoinRoom: " + e.getMessage());
+            e.printStackTrace();
         }
     }
-    
+
     @MessageMapping("/room/{roomId}/approve")
     public void handleApproveUser(@DestinationVariable String roomId, @Payload Map<String, Object> payload) {
         try {
             String targetUserId = (String) payload.get("userId");
             String hostId = (String) payload.get("hostId");
-            
-            // Verify host
+
             dto.RoomDto roomInfo = roomService.getRoomInfo(roomId);
-            if (!roomInfo.getHostId().equals(hostId)) {
-                return; // Only host can approve
-            }
-            
-            // Approve user
+            if (!roomInfo.getHostId().equals(hostId)) return;
+
             roomService.approveUser(roomId, targetUserId);
-            
-            // Get user info
+
             String username = (String) payload.get("username");
             String fullName = (String) payload.get("fullName");
-            
-            // Update presence store
-            presenceService.addOrUpdate(roomId, new UserPresence(targetUserId, username, fullName, "online", System.currentTimeMillis()));
-            System.out.println("Approved user " + targetUserId + " added to room " + roomId);
-            
-            // Notify user they're approved
+
+            presenceService.addOrUpdate(roomId,
+                    new UserPresence(targetUserId, username, fullName, "online", System.currentTimeMillis()));
+            System.out.println("✅ Approved user " + targetUserId + " in room " + roomId);
+
             Map<String, Object> approvedStatus = new HashMap<>();
             approvedStatus.put("type", "approved");
             approvedStatus.put("status", "approved");
             approvedStatus.put("message", "Bạn đã được chấp nhận vào phòng!");
-            approvedStatus.put("roomId", roomId);
             messagingTemplate.convertAndSendToUser(targetUserId, "/queue/approval-status", approvedStatus);
-            
-            // Broadcast presence update
+
             broadcastPresence(roomId);
-            
-            // Notify all users about new member
-            Map<String, Object> notification = new HashMap<>();
-            notification.put("type", "user_approved");
-            notification.put("user", Map.of(
-                "id", targetUserId,
-                "username", username,
-                "fullName", fullName != null ? fullName : username
-            ));
-            messagingTemplate.convertAndSend("/topic/room/" + roomId + "/approval", notification);
-            
         } catch (Exception e) {
             System.err.println("Error in handleApproveUser: " + e.getMessage());
         }
     }
-    
-    @MessageMapping("/room/{roomId}/reject")
-    public void handleRejectUser(@DestinationVariable String roomId, @Payload Map<String, Object> payload) {
-        try {
-            String targetUserId = (String) payload.get("userId");
-            String hostId = (String) payload.get("hostId");
-            
-            // Verify host
-            dto.RoomDto roomInfo = roomService.getRoomInfo(roomId);
-            if (!roomInfo.getHostId().equals(hostId)) {
-                return; // Only host can reject
-            }
-            
-            // Reject user
-            roomService.rejectUser(roomId, targetUserId);
-            
-            // Notify user they're rejected
-            Map<String, Object> rejectedStatus = new HashMap<>();
-            rejectedStatus.put("type", "rejected");
-            rejectedStatus.put("status", "rejected");
-            rejectedStatus.put("message", "Yêu cầu tham gia phòng của bạn đã bị từ chối.");
-            messagingTemplate.convertAndSendToUser(targetUserId, "/queue/approval-status", rejectedStatus);
-            
-            // Notify all users about rejection
-            Map<String, Object> notification = new HashMap<>();
-            notification.put("type", "user_rejected");
-            notification.put("userId", targetUserId);
-            messagingTemplate.convertAndSend("/topic/room/" + roomId + "/approval", notification);
-            
-        } catch (Exception e) {
-            System.err.println("Error in handleRejectUser: " + e.getMessage());
-        }
-    }
-    
+
     @MessageMapping("/room/{roomId}/leave")
     public void handleLeaveRoom(@DestinationVariable String roomId, @Payload Map<String, Object> payload) {
         try {
-            String userId = (String) payload.get("userId");
-            if (userId == null) {
-                userId = (String) payload.get("username");
-            }
-            
-            final String finalUserId = userId; // Make effectively final for lambda
-            if (finalUserId != null) {
-                System.out.println("=== USER LEAVING ROOM ===");
-                System.out.println("Room: " + roomId);
-                System.out.println("User: " + finalUserId);
-                
-                // Remove from presence store
-                presenceService.remove(roomId, finalUserId);
+            Object rawId = payload.get("userId");
+            String userId = rawId != null ? rawId.toString() : (String) payload.get("username");
 
-                // Send leave notification
-                Map<String, Object> leaveNotification = new HashMap<>();
-                leaveNotification.put("type", "leave");
-                leaveNotification.put("user", Map.of("id", finalUserId));
-                messagingTemplate.convertAndSend("/topic/room/" + roomId, leaveNotification);
+            if (userId == null) return;
 
-                // Broadcast updated presence
-                broadcastPresence(roomId);
-                
-                // Try to leave via service
-                try {
-                    RoomJoinDto leaveDto = new RoomJoinDto();
-                    leaveDto.setUserId(finalUserId);
-                    roomService.leaveRoom(roomId, finalUserId);
-                } catch (Exception e) {
-                    // Ignore service errors
-                }
-            }
+            System.out.println("👋 User leaving room " + roomId + ": " + userId);
+
+            presenceService.remove(roomId, userId);
+
+            Map<String, Object> leaveNotification = new HashMap<>();
+            leaveNotification.put("type", "leave");
+            leaveNotification.put("user", Map.of("id", userId));
+            messagingTemplate.convertAndSend("/topic/room/" + roomId, leaveNotification);
+
+            broadcastPresence(roomId);
+
+            roomService.leaveRoom(roomId, userId);
         } catch (Exception e) {
             System.err.println("Error in handleLeaveRoom: " + e.getMessage());
         }
     }
-    
+
     @SubscribeMapping("/topic/presence/{roomId}")
     public void onSubscribePresence(@DestinationVariable String roomId) {
-        // Send current presence when subscribing
         broadcastPresence(roomId);
     }
-    
+
     private void broadcastPresence(String roomId) {
         List<UserPresence> users = presenceService.list(roomId);
         List<Map<String, Object>> userList = new ArrayList<>();
@@ -284,19 +216,8 @@ public class RoomWebSocketController {
         presence.put("roomId", roomId);
 
         System.out.println("=== BROADCASTING PRESENCE ===");
-        System.out.println("Room: " + roomId);
-        System.out.println("Users count: " + users.size());
-        users.forEach(u -> System.out.println("  - " + u.getUserId() + ": " + u.getFullName()));
+        System.out.println("Room: " + roomId + " | Users count: " + users.size());
 
         messagingTemplate.convertAndSend("/topic/presence/" + roomId, presence);
     }
-    
-    // Cleanup stale users periodically
-    public void cleanupStaleUsers() {
-        long now = System.currentTimeMillis();
-        long timeout = 60000; // 1 minute
-        
-        // For simplicity, skip stale cleanup in presence service abstraction here.
-    }
 }
-

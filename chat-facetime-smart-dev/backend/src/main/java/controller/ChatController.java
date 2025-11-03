@@ -15,17 +15,27 @@ public class ChatController {
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
-    // ✅ Khi client gửi /app/chat/{roomId}, server nhận và gửi lại /topic/chat/{roomId}
+    /**
+     * ✅ Gửi tin nhắn trong phòng chat
+     * Client gửi đến: /app/chat/{roomId}
+     * Server broadcast lại: /topic/chat/{roomId}
+     */
     @MessageMapping("/chat/{roomId}")
     public void sendMessage(@DestinationVariable String roomId, ChatMessage message) {
         message.setTimestamp(LocalDateTime.now());
+
         System.out.println("📨 Received message from room " + roomId + ": " + message.getContent());
 
-        // Gửi lại cho tất cả client đang subscribe đúng room
+        // Gửi lại cho tất cả client đang subscribe đúng phòng
         messagingTemplate.convertAndSend("/topic/chat/" + roomId, message);
+
         System.out.println("📢 Broadcasted to /topic/chat/" + roomId);
     }
 
+    // ⚠️ Hai hàm dưới đây bị trùng route với RoomWebSocketController
+    // → Tạm thời comment lại để tránh xung đột và mất sự kiện join/leave
+
+    /*
     @MessageMapping("/room/{roomId}/join")
     public void userJoined(@DestinationVariable String roomId, ChatMessage message) {
         message.setType(ChatMessage.MessageType.SYSTEM);
@@ -41,4 +51,5 @@ public class ChatController {
         message.setTimestamp(LocalDateTime.now());
         messagingTemplate.convertAndSend("/topic/presence/" + roomId, message);
     }
+    */
 }
