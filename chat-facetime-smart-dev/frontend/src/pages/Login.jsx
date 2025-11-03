@@ -35,6 +35,18 @@ function Login() {
       console.log('Response data:', response.data);
 
       if (response.data) {
+        // Store to sessionStorage (tab-scoped) to avoid token clobbering across tabs
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('token', response.data.token);
+          sessionStorage.setItem('user', JSON.stringify({
+            id: response.data.id,
+            username: response.data.username,
+            email: response.data.email,
+            fullName: response.data.fullName,
+            role: response.data.role
+          }));
+        }
+        // Keep localStorage for backward compatibility if some code still reads it
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify({
           id: response.data.id,

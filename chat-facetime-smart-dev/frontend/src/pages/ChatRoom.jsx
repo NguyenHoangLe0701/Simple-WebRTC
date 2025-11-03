@@ -36,7 +36,9 @@ const ChatRoom = () => {
   const navigate = useNavigate();
   const currentUser = useMemo(() => {
     try {
-      const raw = localStorage.getItem('user');
+      const rawSession = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('user') : null;
+      const rawLocal = localStorage.getItem('user');
+      const raw = rawSession || rawLocal;
       return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
@@ -101,24 +103,9 @@ const ChatRoom = () => {
           return;
         }
         
-        console.log('Socket connected, joining room:', roomId);
+        console.log('Socket connected. Subscribing to topics then joining room:', roomId);
         
-        // Join room with user info - ensure userId is unique and always sent
-        const userId = currentUser?.id || currentUser?.userId || currentUser?.username || username;
-        console.log('Joining room with userId:', userId, 'username:', username);
-        
-        socketService.joinRoom(roomId, username, {
-          id: userId,
-          userId: userId,
-          fullName: currentUser?.fullName || username,
-          name: currentUser?.fullName || currentUser?.username || username,
-          email: currentUser?.email || ''
-        });
-        
-        // Wait a bit for join to complete before subscribing
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Subscribe to chat messages
+        // Subscribe to chat messages first
         chatSub = socketService.subscribeToChat(roomId, (messageFrame) => {
           try {
             console.log('=== RECEIVED MESSAGE FRAME ===');
@@ -217,6 +204,17 @@ const ChatRoom = () => {
         });
         
         console.log('Subscribed to signaling:', `/topic/room/${roomId}`);
+
+        // After subscriptions are ready, send join so presence/chat reflects immediately
+        const userId = currentUser?.id || currentUser?.userId || currentUser?.username || username;
+        console.log('Joining room with userId:', userId, 'username:', username);
+        socketService.joinRoom(roomId, username, {
+          id: userId,
+          userId: userId,
+          fullName: currentUser?.fullName || username,
+          name: currentUser?.fullName || currentUser?.username || username,
+          email: currentUser?.email || ''
+        });
       } catch (e) {
         console.error('Error in socket setup:', e);
       }
@@ -490,6 +488,10 @@ const ChatRoom = () => {
                 <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-10">
                   <button
                     onClick={() => {
+                      if (typeof sessionStorage !== 'undefined') {
+                        sessionStorage.removeItem('token');
+                        sessionStorage.removeItem('user');
+                      }
                       localStorage.removeItem('token');
                       localStorage.removeItem('user');
                       window.location.href = '/';

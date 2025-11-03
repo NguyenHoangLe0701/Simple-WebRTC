@@ -11,6 +11,10 @@ class SocketService {
   connect() {
     return new Promise((resolve, reject) => {
       try {
+        if (this.stompClient && this.isConnected) {
+          // Already connected
+          return resolve();
+        }
         // Get backend URL from environment or use proxy for development
         const apiUrl = import.meta.env.VITE_API_URL || '';
         let wsUrl = '/ws'; // Default: use proxy in development
@@ -28,6 +32,9 @@ class SocketService {
           debug: (str) => {
             console.log('STOMP: ' + str);
           },
+          reconnectDelay: 5000,
+          heartbeatIncoming: 10000,
+          heartbeatOutgoing: 10000,
           onConnect: (frame) => {
             console.log('✅ STOMP Connected: ' + frame);
             console.log('  Frame headers:', frame.headers);
@@ -45,6 +52,14 @@ class SocketService {
             console.error('Details: ' + frame.body);
             this.isConnected = false;
             reject(frame);
+          },
+          onWebSocketClose: () => {
+            console.warn('STOMP: WebSocket closed');
+            this.isConnected = false;
+          },
+          onDisconnect: () => {
+            console.log('STOMP: Disconnected');
+            this.isConnected = false;
           }
         });
 
@@ -57,10 +72,13 @@ class SocketService {
   }
 
   disconnect() {
-    if (this.stompClient && this.isConnected) {
-      this.stompClient.deactivate();
-      this.isConnected = false;
-      this.subscriptions.clear();
+    if (this.stompClient) {
+      try {
+        this.stompClient.deactivate();
+      } finally {
+        this.isConnected = false;
+        this.subscriptions.clear();
+      }
     }
   }
 
