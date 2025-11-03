@@ -66,6 +66,7 @@ const ChatRoom = () => {
   const [showShareModal, setShowShareModal] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
   const [imagePreviews, setImagePreviews] = useState([]);
+  const [joinRoomCode, setJoinRoomCode] = useState('');
   const EMOJIS = useMemo(() => (
     ['😀','😄','😁','😂','🤣','😊','😍','😘','😎','🤩','👍','👏','🙏','🔥','💯','🎉','❤️','💙','😢','😡','😴','🤔','🙌','✅']
   ), []);
@@ -78,6 +79,7 @@ const ChatRoom = () => {
   const dropRef = useRef(null);
 
   useEffect(() => {
+    if (!currentUser) return; // Prevent anonymous socket actions before auth
     // Reset messages when changing rooms
     setMessages([]);
     setOnlineUsers([]);
@@ -457,6 +459,19 @@ const ChatRoom = () => {
     copyRoomLink();
   };
 
+  const generateRoomCode = () => {
+    // 6-8 char alphanumeric code
+    const code = Math.random().toString(36).slice(2, 8);
+    navigate(`/chat/${code}`);
+  };
+
+  const joinByCode = () => {
+    const code = String(joinRoomCode || '').trim();
+    if (!code) return;
+    navigate(`/chat/${code}`);
+    setJoinRoomCode('');
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       {/* Sidebar (channels/users) */}
@@ -515,6 +530,23 @@ const ChatRoom = () => {
             placeholder="Tìm phòng hoặc người..."
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              type="text"
+              value={joinRoomCode}
+              onChange={(e)=>setJoinRoomCode(e.target.value)}
+              placeholder="Nhập mã phòng..."
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={joinByCode}
+              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >Vào</button>
+          </div>
+          <button
+            onClick={generateRoomCode}
+            className="mt-2 w-full text-sm px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >Tạo phòng ngẫu nhiên</button>
         </div>
         <div className="p-3 border-b">
           <h2 className="text-xs font-semibold text-gray-500 mb-2">Kênh</h2>
