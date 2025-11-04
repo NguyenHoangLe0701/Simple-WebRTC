@@ -706,6 +706,7 @@ const ChatRoom = () => {
           
           {messages.length > 0 && (
             <Virtuoso
+              key={roomId}
               ref={listRef}
               data={messages.filter(m =>
                 !sidebarQuery || String(m.content).toLowerCase().includes(sidebarQuery.toLowerCase())
