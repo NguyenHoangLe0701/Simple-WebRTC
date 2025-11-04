@@ -4,52 +4,40 @@ import model.ChatMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Controller
 public class ChatController {
 
     @Autowired
-    private SimpMessagingTemplate messagingTemplate;
+ private SimpMessagingTemplate messagingTemplate;
 
-    /**
-     * ✅ Gửi tin nhắn trong phòng chat
-     * Client gửi đến: /app/chat/{roomId}
-     * Server broadcast lại: /topic/chat/{roomId}
-     */
+    // === CHAT MESSAGE ===
     @MessageMapping("/chat/{roomId}")
     public void sendMessage(@DestinationVariable String roomId, ChatMessage message) {
+        // THÊM ID ĐỂ FRONTEND NHẬN TIN MỚI
+        if (message.getId() == null || message.getId().isEmpty()) {
+            message.setId(UUID.randomUUID().toString());
+        }
         message.setTimestamp(LocalDateTime.now());
 
-        System.out.println("📨 Received message from room " + roomId + ": " + message.getContent());
+        System.out.println("CHAT ROOM " + roomId + " | FROM: " + message.getSender() + " | MSG: " + message.getContent());
 
-        // Gửi lại cho tất cả client đang subscribe đúng phòng
         messagingTemplate.convertAndSend("/topic/chat/" + roomId, message);
-
-        System.out.println("📢 Broadcasted to /topic/chat/" + roomId);
     }
 
-    // ⚠️ Hai hàm dưới đây bị trùng route với RoomWebSocketController
-    // → Tạm thời comment lại để tránh xung đột và mất sự kiện join/leave
+    // === WEBRTC SIGNALING ===
+    @MessageMapping("/signal/{roomId}")
+    public void handleSignal(@DestinationVariable String roomId, @Payload Object signal) {
+        System.out.println("SIGNAL ROOM " + roomId + " | TYPE: " + 
+            (signal instanceof java.util.Map ? ((java.util.Map<?,?>)signal).get("type") : "unknown"));
 
-    /*
-    @MessageMapping("/room/{roomId}/join")
-    public void userJoined(@DestinationVariable String roomId, ChatMessage message) {
-        message.setType(ChatMessage.MessageType.SYSTEM);
-        message.setContent(message.getSenderName() + " đã tham gia phòng.");
-        message.setTimestamp(LocalDateTime.now());
-        messagingTemplate.convertAndSend("/topic/presence/" + roomId, message);
+        // GỬI ĐÚNG ĐÍCH (frontend subscribe /topic/room/{roomId})
+        messagingTemplate.convertAndSend("/topic/room/" + roomId, signal);
     }
-
-    @MessageMapping("/room/{roomId}/leave")
-    public void userLeft(@DestinationVariable String roomId, ChatMessage message) {
-        message.setType(ChatMessage.MessageType.SYSTEM);
-        message.setContent(message.getSenderName() + " đã rời phòng.");
-        message.setTimestamp(LocalDateTime.now());
-        messagingTemplate.convertAndSend("/topic/presence/" + roomId, message);
-    }
-    */
 }
