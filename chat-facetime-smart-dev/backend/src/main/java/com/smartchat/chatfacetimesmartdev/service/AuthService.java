@@ -11,9 +11,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.smartchat.chatfacetimesmartdev.dto.AuthResponseDto;
-import com.smartchat.chatfacetimesmartdev.dto.LoginDto;
-import com.smartchat.chatfacetimesmartdev.dto.RegisterDto;
+import com.smartchat.chatfacetimesmartdev.dto.respond.AuthResponseDto;
+import com.smartchat.chatfacetimesmartdev.dto.respond.LoginDto;
+import com.smartchat.chatfacetimesmartdev.dto.respond.RegisterDto;
 import com.smartchat.chatfacetimesmartdev.entity.User;
 import com.smartchat.chatfacetimesmartdev.repository.UserRepository;
 import com.smartchat.chatfacetimesmartdev.util.JwtUtil;
@@ -49,7 +49,7 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(registerDto.getPassword()));
         user.setFullName(registerDto.getFullName());
         user.setRole(User.Role.USER);
-        user.setActive(true);
+        user.setIsActive(true);
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         

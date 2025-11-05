@@ -3,6 +3,7 @@ package com.smartchat.chatfacetimesmartdev.controller;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.smartchat.chatfacetimesmartdev.dto.respond.RegisterDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,8 +12,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.smartchat.chatfacetimesmartdev.dto.AuthResponseDto;
-import com.smartchat.chatfacetimesmartdev.dto.LoginDto;
+import com.smartchat.chatfacetimesmartdev.dto.respond.AuthResponseDto;
+import com.smartchat.chatfacetimesmartdev.dto.respond.LoginDto;
 import com.smartchat.chatfacetimesmartdev.service.AuthService;
 import jakarta.validation.Valid;
 
@@ -27,7 +28,7 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody com.smartchat.chatfacetimesmartdev.dto.RegisterDto dto) {
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterDto dto) {
         try {
             AuthResponseDto response = authService.register(dto);
             return ResponseEntity.ok(response);
@@ -41,6 +42,7 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginDto dto) {
         try {
+            System.out.printf("hihihihihiihih");
             AuthResponseDto response = authService.login(dto);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {

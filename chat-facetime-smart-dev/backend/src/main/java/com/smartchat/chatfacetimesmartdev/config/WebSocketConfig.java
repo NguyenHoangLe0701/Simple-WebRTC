@@ -1,7 +1,8 @@
 package com.smartchat.chatfacetimesmartdev.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -9,44 +10,38 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-  @Value("${stomp.relay.enabled:false}")
-  private boolean relayEnabled;
+    private final WebSocketAuthChannelInterceptor authChannelInterceptor;
 
-  @Value("${stomp.relay.host:}")
-  private String relayHost;
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        // Enable simple broker for topics and user-specific queues
+        config.enableSimpleBroker("/topic", "/queue", "/user");
 
-  @Value("${stomp.relay.port:61613}")
-  private Integer relayPort;
+        // Set application destination prefix for messages bound to @MessageMapping methods
+        config.setApplicationDestinationPrefixes("/app");
 
-  @Value("${stomp.relay.login:}")
-  private String relayLogin;
-
-  @Value("${stomp.relay.passcode:}")
-  private String relayPasscode;
-
-  @Override
-  public void configureMessageBroker(MessageBrokerRegistry config) {
-    if (relayEnabled && relayHost != null && !relayHost.isBlank()) {
-      // Use external broker relay (RabbitMQ/ActiveMQ over STOMP)
-      config.enableStompBrokerRelay("/topic", "/queue", "/room")
-            .setRelayHost(relayHost)
-            .setRelayPort(relayPort != null ? relayPort : 61613)
-            .setClientLogin(relayLogin)
-            .setClientPasscode(relayPasscode)
-            .setSystemLogin(relayLogin)
-            .setSystemPasscode(relayPasscode);
-    } else {
-      // Fallback to in-memory simple broker
-      config.enableSimpleBroker("/topic","/room","/queue");
+        // Prefix for user-specific messages
+        config.setUserDestinationPrefix("/user");
     }
-    config.setApplicationDestinationPrefixes("/app");
-    config.setUserDestinationPrefix("/user");
-  }
 
-  @Override
-  public void registerStompEndpoints(StompEndpointRegistry registry) {
-    registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
-  }
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Register STOMP endpoint with SockJS fallback
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*") // Configure based on your requirements
+                .withSockJS();
+
+        // Register without SockJS for clients that support native WebSocket
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*");
+    }
+
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        // Add authentication interceptor
+        registration.interceptors(authChannelInterceptor);
+    }
 }

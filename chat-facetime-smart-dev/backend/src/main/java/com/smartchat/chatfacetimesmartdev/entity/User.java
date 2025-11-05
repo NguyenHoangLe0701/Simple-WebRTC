@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.Collections;
 
+import com.smartchat.chatfacetimesmartdev.enums.UserStatus;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -33,7 +34,7 @@ public class User implements UserDetails {
     
     @Column(unique = true, nullable = false)
     private String username;
-    
+
     @Column(unique = true, nullable = false)
     private String email;
     
@@ -48,7 +49,7 @@ public class User implements UserDetails {
     private Role role = Role.USER;
     
     @Column(name = "is_active")
-    private Boolean active = true;
+    private Boolean isActive = true;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -82,10 +83,18 @@ public class User implements UserDetails {
     
     @Override
     public boolean isEnabled() {
-        return active;
+        return isActive;
     }
     
     public enum Role {
         ADMIN, USER
     }
+
+    public Boolean isActive(){
+        return this.isActive;
+    }
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status")
+    private UserStatus status = UserStatus.OFFLINE;
 }

@@ -31,7 +31,7 @@ public class DataInitializer implements CommandLineRunner {
             adminUser.setEmail("admin@smartchat.com");
             adminUser.setFullName("System Administrator");
             adminUser.setRole(User.Role.ADMIN);
-            adminUser.setActive(true);
+            adminUser.setIsActive(true);
             adminUser.setCreatedAt(LocalDateTime.now());
             System.out.println("✅ Admin user created: username=admin, password=12345");
         } else {
