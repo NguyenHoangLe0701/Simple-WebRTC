@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import socketService from '../services/socket';
-import { PhoneOff, Mic, MicOff, Video, VideoOff, Monitor, Share2, Users } from 'lucide-react';
+import { PhoneOff, Mic, MicOff, Video, VideoOff, Monitor, Users, Camera, CameraOff } from 'lucide-react';
 
 const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
   const localVideoRef = useRef(null);
@@ -14,14 +14,205 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
   const [participants, setParticipants] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [isReadyForSignaling, setIsReadyForSignaling] = useState(false);
+  
+  // State mới cho permission flow
+  const [permissionStatus, setPermissionStatus] = useState('pending'); // 'pending', 'granted', 'denied', 'error', 'requesting'
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [requestedMedia, setRequestedMedia] = useState({ video: false, audio: false });
 
- 
-  // 🆕 SỬA HÀM sendSignal TRONG EnhancedVideoCall.jsx
+  // Modal xin quyền
+  const PermissionModal = () => {
+    if (!showPermissionModal) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl max-w-md w-full p-6 text-center">
+          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Camera className="h-8 w-8 text-blue-600" />
+          </div>
+          
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+            Cho phép truy cập camera & microphone
+          </h3>
+          
+          <p className="text-gray-600 mb-6">
+            Để tham gia cuộc gọi video, vui lòng cho phép truy cập camera và microphone. 
+            Bạn có thể thay đổi quyền này sau trong cài đặt trình duyệt.
+          </p>
+
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                setShowPermissionModal(false);
+                setPermissionStatus('denied');
+                onEndCall();
+              }}
+              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Hủy
+            </button>
+            
+            <button
+              onClick={() => requestMediaPermission({ video: true, audio: true })}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+            >
+              <Camera className="h-4 w-4" />
+              <span>Cho phép</span>
+            </button>
+          </div>
+
+          {/* Tùy chọn nâng cao */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <p className="text-sm text-gray-500 mb-2">Hoặc chọn thiết bị cụ thể:</p>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => requestMediaPermission({ video: true, audio: false })}
+                className="flex-1 px-3 py-2 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors text-sm"
+              >
+                Chỉ Camera
+              </button>
+              <button
+                onClick={() => requestMediaPermission({ video: false, audio: true })}
+                className="flex-1 px-3 py-2 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors text-sm"
+              >
+                Chỉ Micro
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Hàm xin quyền thông minh
+  const requestMediaPermission = async (constraints = { video: true, audio: true }) => {
+    try {
+      setPermissionStatus('requesting');
+      setShowPermissionModal(false);
+      setRequestedMedia(constraints);
+      
+      console.log('🎥 Requesting media with constraints:', constraints);
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
+      console.log('✅ Media permission granted');
+      setPermissionStatus('granted');
+      setLocalStream(stream);
+      
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+      
+      // Tự động join call sau khi có media
+      initializeSignaling();
+      
+    } catch (error) {
+      console.error('❌ Media permission denied:', error);
+      setPermissionStatus('denied');
+      
+      let errorMessage = 'Không thể truy cập thiết bị. ';
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage += 'Bạn đã từ chối cấp quyền. ';
+        
+        errorMessage += `
+        
+Để bật lại quyền:
+1. Click 🔒 trong thanh địa chỉ
+2. Chọn "Site settings" 
+3. Tìm Camera & Microphone
+4. Đổi thành "Allow"
+
+Hoặc thử:
+• Refresh trang và đồng ý khi popup hiện lên
+• Dùng trình duyệt khác
+        `;
+      } else if (error.name === 'NotFoundError') {
+        errorMessage += 'Không tìm thấy camera/microphone.';
+      } else {
+        errorMessage += error.message;
+      }
+      
+      alert(errorMessage);
+    }
+  };
+
+  // Kiểm tra permissions hiện có
+  const checkExistingPermissions = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasCameraPermission = devices.some(device => 
+        device.kind === 'videoinput' && device.deviceId !== ''
+      );
+      const hasMicPermission = devices.some(device => 
+        device.kind === 'audioinput' && device.deviceId !== ''
+      );
+      
+      if (hasCameraPermission && hasMicPermission) {
+        console.log('✅ Already have media permissions');
+        requestMediaPermission({ video: true, audio: true });
+      } else {
+        console.log('🟡 Showing permission modal');
+        setShowPermissionModal(true);
+      }
+    } catch (error) {
+      console.warn('⚠️ Cannot check existing permissions:', error);
+      setShowPermissionModal(true);
+    }
+  };
+
+  // Effect chính - chỉ hiện modal khi cần
+  useEffect(() => {
+    if (isActive && permissionStatus === 'pending') {
+      checkExistingPermissions();
+    }
+    
+    return () => {
+      if (!isActive) {
+        cleanup();
+      }
+    };
+  }, [isActive]);
+
+  // Khởi tạo signaling sau khi có media
+  const initializeSignaling = async () => {
+    if (!isActive || !roomId || !localStream) return;
+
+    try {
+      console.log('🎯 Initializing WebRTC signaling...');
+      setConnectionStatus('connecting');
+      
+      if (!socketService.isConnected) {
+        await socketService.connect();
+      }
+
+      const signalSub = await socketService.subscribeToSignaling(roomId, (messageData) => {
+        console.log('📨 Signaling message received:', messageData);
+        handleSignalingMessage(messageData);
+      });
+      
+      if (signalSub) {
+        setConnectionStatus('connected');
+        setIsReadyForSignaling(true);
+        console.log('✅ WebRTC signaling initialized');
+        
+        await sendSignal({
+          type: 'join',
+          targetUserId: null
+        });
+      }
+
+    } catch (error) {
+      console.error('❌ WebRTC signaling initialization error:', error);
+      setConnectionStatus('error');
+    }
+  };
+
+  // Hàm gửi signal
   const sendSignal = async (signal, retryCount = 0) => {
     try {
       console.log('📤 Sending signal:', signal.type, 'to:', signal.targetUserId || 'all');
       
-      // 🆕 TẠO USER OBJECT ĐẦY ĐỦ
       const userInfo = {
         id: currentUser?.id || currentUser?.username || 'unknown',
         username: currentUser?.username || 'user', 
@@ -32,7 +223,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         type: signal.type,
         to: signal.targetUserId || 'all',
         data: signal.data || {},
-        user: userInfo, // 🆕 QUAN TRỌNG: ĐẢM BẢO CÓ USER OBJECT
+        user: userInfo,
         timestamp: new Date().toISOString()
       };
       
@@ -52,141 +243,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 EFFECT CHÍNH - ĐÃ SỬA THỨ TỰ KHỞI TẠO
-  useEffect(() => {
-    if (isActive) {
-      initializeCall();
-    } else {
-      cleanup();
-    }
-    
-    return () => {
-      cleanup();
-    };
-  }, [isActive]);
-
-  // 🆕 EFFECT CHO SIGNALING - CHỈ CHẠY KHI ĐÃ CÓ LOCAL STREAM
-  useEffect(() => {
-    if (!isActive || !roomId || !localStream) return;
-
-    let signalSub;
-    const initializeSignaling = async () => {
-      try {
-        console.log('🎯 Initializing WebRTC signaling...');
-        
-        // Đảm bảo kết nối WebSocket
-        if (!socketService.isConnected) {
-          setConnectionStatus('connecting');
-          await socketService.connect();
-        }
-
-        // Subscribe to signaling
-        signalSub = await socketService.subscribeToSignaling(roomId, (messageData) => {
-          console.log('📨 Signaling message received:', messageData);
-          handleSignalingMessage(messageData);
-        });
-        
-        if (signalSub) {
-          setConnectionStatus('connected');
-          setIsReadyForSignaling(true);
-          console.log('✅ WebRTC signaling initialized');
-          
-          // 🆕 GỬI JOIN SIGNAL SAU KHI ĐÃ SẴN SÀNG
-          console.log('📤 Sending join signal...');
-          await sendSignal({
-            type: 'join',
-            targetUserId: null
-          });
-          
-        } else {
-          setConnectionStatus('error');
-          console.error('❌ Failed to initialize WebRTC signaling');
-        }
-
-      } catch (error) {
-        console.error('❌ WebRTC signaling initialization error:', error);
-        setConnectionStatus('error');
-      }
-    };
-
-    initializeSignaling();
-
-    return () => {
-      if (signalSub) {
-        socketService.unsubscribe(`/topic/signal/${roomId}`);
-      }
-      setIsReadyForSignaling(false);
-    };
-  }, [isActive, roomId, localStream]);
-
-  // 🆕 Khởi tạo call - ĐÃ TỐI ƯU
-  const initializeCall = async () => {
-    try {
-      setConnectionStatus('initializing');
-      console.log('🎬 Initializing video call...');
-      
-      // 🆕 LẤY MEDIA STREAM TRƯỚC
-      let stream;
-      const constraints = [
-        { 
-          video: { width: 1280, height: 720, frameRate: 30 },
-          audio: { echoCancellation: true, noiseSuppression: true }
-        },
-        { 
-          video: true, 
-          audio: true 
-        },
-        { 
-          video: { width: 640, height: 480 }, 
-          audio: true 
-        }
-      ];
-
-      for (const constraint of constraints) {
-        try {
-          stream = await navigator.mediaDevices.getUserMedia(constraint);
-          console.log('✅ Got media stream with constraints:', constraint);
-          break;
-        } catch (error) {
-          console.warn('⚠️ Failed with constraints:', constraint, error);
-          continue;
-        }
-      }
-
-      if (!stream) {
-        throw new Error('Không thể truy cập camera/microphone');
-      }
-
-      setLocalStream(stream);
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-
-      console.log('✅ Media stream ready, waiting for signaling...');
-
-    } catch (error) {
-      console.error('❌ Error initializing video call:', error);
-      setConnectionStatus('error');
-      
-      let errorMessage = 'Không thể khởi tạo cuộc gọi video. ';
-      if (error.name === 'NotAllowedError') {
-        errorMessage += 'Vui lòng cấp quyền truy cập camera và microphone.';
-      } else if (error.name === 'NotFoundError') {
-        errorMessage += 'Không tìm thấy camera/microphone.';
-      } else {
-        errorMessage += error.message;
-      }
-      
-      alert(errorMessage);
-      onEndCall();
-    }
-  };
-
-  // 🆕 Tạo peer connection - ĐÃ CẢI THIỆN
+  // Tạo peer connection
   const createPeerConnection = (userId) => {
     console.log('🔄 Creating peer connection for:', userId);
     
-    // 🆕 KIỂM TRA NẾU ĐÃ CÓ PEER CONNECTION
     if (peerConnections.has(userId)) {
       console.log('⏩ Peer connection already exists for:', userId);
       return peerConnections.get(userId);
@@ -200,7 +260,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       iceCandidatePoolSize: 10
     });
 
-    // 🆕 THÊM LOCAL TRACKS - QUAN TRỌNG!
     if (localStream) {
       localStream.getTracks().forEach(track => {
         console.log('➕ Adding local track:', track.kind, 'to:', userId);
@@ -210,7 +269,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       console.warn('⚠️ No local stream available when creating PC for:', userId);
     }
 
-    // XỬ LÝ REMOTE TRACKS
     pc.ontrack = (event) => {
       console.log('🎬 Received remote track from:', userId, event.track.kind);
       const [remoteStream] = event.streams;
@@ -222,7 +280,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           return newMap;
         });
         
-        // 🆕 TỰ ĐỘNG TẠO ANSWER NẾU NHẬN ĐƯỢC TRACK MÀ CHƯA CÓ ANSWER
         if (pc.remoteDescription && !pc.localDescription) {
           console.log('🔄 Auto-creating answer for:', userId);
           createAndSendAnswer(pc, userId);
@@ -230,7 +287,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       }
     };
 
-    // XỬ LÝ ICE CANDIDATES
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         console.log('🧊 Sending ICE candidate to:', userId);
@@ -242,7 +298,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       }
     };
 
-    // THEO DÕI TRẠNG THÁI KẾT NỐI
     pc.onconnectionstatechange = () => {
       console.log(`🔗 ${userId} connection state:`, pc.connectionState);
       if (pc.connectionState === 'connected') {
@@ -261,7 +316,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     return pc;
   };
 
-  // 🆕 Hàm tạo và gửi answer
+  // Hàm tạo và gửi answer
   const createAndSendAnswer = async (pc, userId) => {
     try {
       console.log('📝 Creating answer for:', userId);
@@ -288,7 +343,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       
       console.log('📨 Processing signal:', data.type, 'from:', senderId);
       
-      // Bỏ qua signal từ chính mình
       if (senderId === currentUserId) {
         console.log('⏩ Skipping own signal');
         return;
@@ -336,25 +390,21 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 Xử lý user join - ĐÃ CẢI THIỆN
+  // Xử lý user join
   const handleUserJoin = async (user) => {
     const userId = user.id;
     console.log('👋 Handling user join:', userId);
     
-    // Thêm vào participants
     setParticipants(prev => {
       if (prev.find(p => p.id === userId)) return prev;
       return [...prev, user];
     });
     
-    // 🆕 ĐỢI MỘT CHÚT ĐỂ ĐẢM BẢO REMOTE SẴN SÀNG
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    // Tạo peer connection
     const pc = createPeerConnection(userId);
     
     try {
-      // 🆕 THÊM DELAY TRƯỚC KHI TẠO OFFER
       await new Promise(resolve => setTimeout(resolve, 1000));
       
       console.log('📝 Creating offer for:', userId);
@@ -373,7 +423,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 Xử lý offer - ĐÃ CẢI THIỆN
+  // Xử lý offer
   const handleOffer = async (data) => {
     const userId = data.user?.id;
     console.log('📨 Handling offer from:', userId);
@@ -397,7 +447,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 Xử lý answer - ĐÃ CẢI THIỆN
+  // Xử lý answer
   const handleAnswer = async (data) => {
     const userId = data.user?.id;
     console.log('📨 Handling answer from:', userId);
@@ -405,7 +455,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     const pc = peerConnections.get(userId);
     if (pc) {
       try {
-        // 🆕 KIỂM TRA TRẠNG THÁI TRƯỚC KHI SET REMOTE DESCRIPTION
         if (pc.signalingState !== 'stable') {
           console.log('⏳ Waiting for stable signaling state for:', userId);
           await new Promise(resolve => setTimeout(resolve, 500));
@@ -421,7 +470,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 Xử lý ICE candidate - ĐÃ CẢI THIỆN
+  // Xử lý ICE candidate
   const handleIceCandidate = async (data) => {
     const userId = data.user?.id;
     console.log('🧊 Handling ICE candidate from:', userId);
@@ -429,13 +478,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     const pc = peerConnections.get(userId);
     if (pc && data.candidate) {
       try {
-        // 🆕 KIỂM TRA TRẠNG THÁI SIGNALING
         if (pc.remoteDescription) {
           await pc.addIceCandidate(data.candidate);
           console.log('✅ ICE candidate added for:', userId);
         } else {
           console.log('⏳ Delaying ICE candidate - waiting for remote description...');
-          // Lưu candidate và thêm sau khi có remote description
           setTimeout(() => {
             if (pc.remoteDescription) {
               pc.addIceCandidate(data.candidate);
@@ -452,10 +499,8 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     const userId = user.id;
     console.log('👋 User leaving:', userId);
     
-    // Remove from participants
     setParticipants(prev => prev.filter(p => p.id !== userId));
     
-    // Close peer connection
     const pc = peerConnections.get(userId);
     if (pc) {
       pc.close();
@@ -466,7 +511,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       });
     }
     
-    // Remove remote stream
     setRemoteStreams(prev => {
       const newMap = new Map(prev);
       newMap.delete(userId);
@@ -474,13 +518,12 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     });
   };
 
-  // 🆕 HÀM CHIA SẺ MÀN HÌNH - ĐÃ THÊM
+  // Hàm chia sẻ màn hình
   const toggleScreenShare = async () => {
     try {
       if (!isScreenSharing) {
         console.log('🖥️ Starting screen share...');
         
-        // Lấy stream màn hình
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: {
             cursor: 'always',
@@ -495,7 +538,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           throw new Error('Không thể lấy video track từ màn hình');
         }
         
-        // Thay thế video track trong tất cả peer connections
         peerConnections.forEach((pc, userId) => {
           const sender = pc.getSenders().find(s => 
             s.track && s.track.kind === 'video'
@@ -506,24 +548,20 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           }
         });
         
-        // Cập nhật local video hiển thị
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
         
-        // Cập nhật local stream state
         setLocalStream(screenStream);
         setIsScreenSharing(true);
         console.log('✅ Screen sharing started');
         
-        // Xử lý khi user dừng chia sẻ màn hình từ browser UI
         videoTrack.onended = async () => {
           console.log('🖥️ Screen share ended by user');
           await stopScreenShare();
         };
         
       } else {
-        // Dừng chia sẻ màn hình
         await stopScreenShare();
       }
     } catch (error) {
@@ -534,12 +572,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 HÀM DỪNG CHIA SẺ MÀN HÌNH - ĐÃ THÊM
+  // Hàm dừng chia sẻ màn hình
   const stopScreenShare = async () => {
     try {
       console.log('🖥️ Stopping screen share...');
       
-      // Dừng tất cả tracks trong stream hiện tại (screen stream)
       if (localStream) {
         localStream.getTracks().forEach(track => {
           if (track.readyState === 'live') {
@@ -548,7 +585,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         });
       }
       
-      // Khôi phục camera
       const cameraStream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
@@ -557,9 +593,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       const newVideoTrack = cameraStream.getVideoTracks()[0];
       const newAudioTrack = cameraStream.getAudioTracks()[0];
       
-      // Thay thế tracks trong tất cả peer connections
       peerConnections.forEach((pc, userId) => {
-        // Thay thế video track
         const videoSender = pc.getSenders().find(s => 
           s.track && s.track.kind === 'video'
         );
@@ -568,7 +602,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           console.log('✅ Restored camera video track for:', userId);
         }
         
-        // Thay thế audio track (nếu cần)
         const audioSender = pc.getSenders().find(s => 
           s.track && s.track.kind === 'audio'
         );
@@ -578,12 +611,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         }
       });
       
-      // Cập nhật local video hiển thị
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = cameraStream;
       }
       
-      // Cập nhật state
       setLocalStream(cameraStream);
       setIsScreenSharing(false);
       console.log('✅ Screen sharing stopped, camera restored');
@@ -591,7 +622,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     } catch (error) {
       console.error('❌ Error restoring camera:', error);
       
-      // Fallback: tạo stream trống nếu không thể khôi phục camera
       const emptyStream = new MediaStream();
       setLocalStream(emptyStream);
       setIsScreenSharing(false);
@@ -604,11 +634,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 Cleanup - ĐÃ CẢI THIỆN
+  // Cleanup
   const cleanup = () => {
     console.log('🧹 Cleaning up video call...');
     
-    // Stop local stream
     if (localStream) {
       localStream.getTracks().forEach(track => {
         track.stop();
@@ -617,17 +646,18 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       setLocalStream(null);
     }
     
-    // Close peer connections
     peerConnections.forEach((pc, userId) => {
       pc.close();
       console.log('🔒 Closed peer connection with:', userId);
     });
+    
     setPeerConnections(new Map());
     setRemoteStreams(new Map());
     setParticipants([]);
     setIsReadyForSignaling(false);
+    setPermissionStatus('pending');
+    setShowPermissionModal(false);
     
-    // Send leave signal
     if (socketService.isConnected && roomId) {
       sendSignal({
         type: 'leave',
@@ -682,8 +712,58 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
   };
   
   const participantCount = participants.length + 1;
+
+  // Render các trạng thái khác nhau
   if (!isActive) return null;
 
+  if (showPermissionModal) {
+    return <PermissionModal />;
+  }
+
+  if (permissionStatus === 'requesting') {
+    return (
+      <div className="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center">
+        <div className="text-center text-white">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <h3 className="text-xl font-semibold mb-2">Đang kết nối...</h3>
+          <p className="text-gray-400">Vui lòng cho phép truy cập camera và microphone</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (permissionStatus === 'denied') {
+    return (
+      <div className="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center">
+        <div className="bg-gray-800 rounded-2xl p-8 max-w-md text-center">
+          <CameraOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-white mb-2">Không thể truy cập camera/micro</h3>
+          <p className="text-gray-400 mb-6">
+            Bạn cần cấp quyền camera và microphone để tham gia cuộc gọi video.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                setPermissionStatus('pending');
+                setShowPermissionModal(true);
+              }}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Thử lại
+            </button>
+            <button
+              onClick={onEndCall}
+              className="w-full px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Thoát
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main video call UI
   return (
     <div className="fixed inset-0 bg-gray-900 z-50 flex flex-col">
       {/* Header */}
@@ -763,7 +843,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
             );
           })}
 
-          {/* 🆕 Placeholder cho participants chưa có stream */}
+          {/* Placeholder cho participants chưa có stream */}
           {participants.filter(p => !remoteStreams.has(p.id)).map(participant => (
             <div key={participant.id} className="relative bg-gray-700 rounded-lg overflow-hidden border-2 border-gray-500 flex items-center justify-center">
               <div className="text-center text-white">
