@@ -19,30 +19,21 @@ class SocketService {
   }
 
   async connect() {
-    // Nếu đang kết nối, return promise hiện tại
     if (this.connectionPromise) {
       return this.connectionPromise;
     }
 
-    // Tạo promise mới cho kết nối
     this.connectionPromise = new Promise((resolve, reject) => {
       this.connectionResolve = resolve;
 
-      // 🆕 SỬA QUAN TRỌNG: Xử lý URL cho cả localhost và production
-      const apiUrl = import.meta.env.VITE_API_URL;
-      
+      // 🆕 URL CHUẨN CHO CẢ LOCALHOST VÀ PRODUCTION
       let wsUrl;
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         // Local development
         wsUrl = 'http://localhost:8080/ws';
-      } else if (apiUrl) {
-        // Production với environment variable
-        wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws';
       } else {
-        // Fallback: tự động detect production URL
-        const isHttps = window.location.protocol === 'https:';
-        const currentHost = window.location.host;
-        wsUrl = `${isHttps ? 'https' : 'http'}://${currentHost}/ws`;
+        // Production: SockJS cần https://
+        wsUrl = 'https://simple-webrtc-4drq.onrender.com/ws';
       }
 
       console.log('🔗 Connecting to WebSocket:', wsUrl);
@@ -51,10 +42,11 @@ class SocketService {
 
       this.client = new Client({
         webSocketFactory: () => socket,
-        connectHeaders: { Authorization: `Bearer ${this.getToken()}` },
+        connectHeaders: { 
+          Authorization: `Bearer ${this.getToken()}` 
+        },
         reconnectDelay: 5000,
         debug: (str) => {
-          // 🆕 Chỉ log debug trên localhost để giảm noise
           if (window.location.hostname === 'localhost') {
             console.log('🐛 STOMP Debug:', str);
           }
@@ -83,7 +75,6 @@ class SocketService {
 
       this.client.activate();
 
-      // Timeout sau 10 giây
       setTimeout(() => {
         if (!this.connected) {
           reject(new Error('Connection timeout'));
@@ -109,14 +100,12 @@ class SocketService {
     }
   }
 
-  // 🆕 THÊM PHƯƠNG THỨC sendSignal - ĐÃ SỬA
   async sendSignal(roomId, signalData) {
     try {
       console.log('📤 Sending signal:', signalData);
       
-      // 🆕 GIỮ NGUYÊN TOÀN BỘ signalData, KHÔNG TẠO OBJECT MỚI
       const signalMessage = {
-        ...signalData, // 🆕 QUAN TRỌNG: giữ nguyên tất cả fields
+        ...signalData,
         timestamp: signalData.timestamp || new Date().toISOString()
       };
       
@@ -130,7 +119,6 @@ class SocketService {
     }
   }
 
-  // 🆕 PHƯƠNG THỨC SUBSCRIBE TO SIGNALING
   async subscribeToSignaling(roomId, callback) {
     try {
       console.log('📡 Subscribing to signaling for room:', roomId);
@@ -139,13 +127,10 @@ class SocketService {
         try {
           console.log('📨 Raw signaling message received:', messageData);
           
-          // 🆕 XỬ LÝ CẢ OBJECT VÀ FRAME
           if (messageData.body) {
-            // Nếu là STOMP frame
             const parsedData = JSON.parse(messageData.body);
             callback(parsedData);
           } else {
-            // Nếu là object trực tiếp
             callback(messageData);
           }
         } catch (error) {
@@ -164,7 +149,6 @@ class SocketService {
     }
   }
 
-  // 🆕 THÊM PROPERTY isConnected
   get isConnected() {
     return this.connected && this.client?.connected;
   }
@@ -176,7 +160,6 @@ class SocketService {
         throw new Error('WebSocket not connected');
       }
 
-      // Đợi thêm một chút để chắc chắn client đã sẵn sàng
       await new Promise(resolve => setTimeout(resolve, 100));
 
       if (!this.client?.connected) {
@@ -240,7 +223,6 @@ class SocketService {
 
   async joinRoom(roomId, user) {
     try {
-      // 🆕 ĐẢM BẢO USER DATA ĐẦY ĐỦ
       const userData = {
         username: user.username || user.fullName || 'user',
         userId: user.id || user.userId || user.username,
@@ -262,7 +244,6 @@ class SocketService {
 
   async leaveRoom(roomId, username) {
     try {
-      // Chỉ gửi leave nếu đang kết nối
       if (this.connected && this.client?.connected) {
         await this.send(`/app/room/${roomId}/leave`, { 
           username: username || 'anonymous' 
@@ -273,12 +254,10 @@ class SocketService {
       }
     } catch (error) {
       console.warn('⚠️ Leave room failed (ignored):', error);
-      // Không throw error ở đây vì đang cleanup
     }
   }
 
   async sendMessage(roomId, message) {
-    // 🆕 ĐẢM BẢO GỬI ĐÚNG ENDPOINT VÀ FORMAT
     const chatMessage = {
       id: message.id,
       sender: message.sender,
