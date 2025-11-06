@@ -15,10 +15,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [isReadyForSignaling, setIsReadyForSignaling] = useState(false);
   
-  // State mới cho permission flow
-  const [permissionStatus, setPermissionStatus] = useState('pending'); // 'pending', 'granted', 'denied', 'error', 'requesting'
+  // State cho permission flow
+  const [permissionStatus, setPermissionStatus] = useState('pending');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [requestedMedia, setRequestedMedia] = useState({ video: false, audio: false });
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Modal xin quyền
   const PermissionModal = () => {
@@ -61,7 +62,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
             </button>
           </div>
 
-          {/* Tùy chọn nâng cao */}
           <div className="mt-4 pt-4 border-t border-gray-200">
             <p className="text-sm text-gray-500 mb-2">Hoặc chọn thiết bị cụ thể:</p>
             <div className="flex space-x-2">
@@ -84,7 +84,36 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     );
   };
 
-  // Hàm xin quyền thông minh
+  // Effect chính
+  useEffect(() => {
+    if (!isActive) {
+      cleanup();
+      return;
+    }
+
+    let mounted = true;
+    
+    const initialize = async () => {
+      try {
+        if (mounted && permissionStatus === 'pending' && !isInitialized) {
+          await checkExistingPermissions();
+        }
+      } catch (error) {
+        console.error('❌ Initialization error:', error);
+      }
+    };
+
+    initialize();
+
+    return () => {
+      mounted = false;
+      if (!isActive) {
+        cleanup();
+      }
+    };
+  }, [isActive]);
+
+  // Hàm xin quyền
   const requestMediaPermission = async (constraints = { video: true, audio: true }) => {
     try {
       setPermissionStatus('requesting');
@@ -103,8 +132,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         localVideoRef.current.srcObject = stream;
       }
       
-      // Tự động join call sau khi có media
-      initializeSignaling();
+      await initializeSignaling();
       
     } catch (error) {
       console.error('❌ Media permission denied:', error);
@@ -113,20 +141,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       let errorMessage = 'Không thể truy cập thiết bị. ';
       
       if (error.name === 'NotAllowedError') {
-        errorMessage += 'Bạn đã từ chối cấp quyền. ';
-        
-        errorMessage += `
-        
-Để bật lại quyền:
-1. Click 🔒 trong thanh địa chỉ
-2. Chọn "Site settings" 
-3. Tìm Camera & Microphone
-4. Đổi thành "Allow"
-
-Hoặc thử:
-• Refresh trang và đồng ý khi popup hiện lên
-• Dùng trình duyệt khác
-        `;
+        errorMessage += 'Bạn đã từ chối cấp quyền. Vui lòng refresh trang và đồng ý cấp quyền.';
       } else if (error.name === 'NotFoundError') {
         errorMessage += 'Không tìm thấy camera/microphone.';
       } else {
@@ -139,6 +154,11 @@ Hoặc thử:
 
   // Kiểm tra permissions hiện có
   const checkExistingPermissions = async () => {
+    if (isInitialized) {
+      console.log('⏩ Skip permission check - already initialized');
+      return;
+    }
+
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const hasCameraPermission = devices.some(device => 
@@ -150,39 +170,33 @@ Hoặc thử:
       
       if (hasCameraPermission && hasMicPermission) {
         console.log('✅ Already have media permissions');
-        requestMediaPermission({ video: true, audio: true });
+        await requestMediaPermission({ video: true, audio: true });
       } else {
         console.log('🟡 Showing permission modal');
         setShowPermissionModal(true);
       }
+      
+      setIsInitialized(true);
     } catch (error) {
       console.warn('⚠️ Cannot check existing permissions:', error);
       setShowPermissionModal(true);
+      setIsInitialized(true);
     }
   };
 
-  // Effect chính - chỉ hiện modal khi cần
-  useEffect(() => {
-    if (isActive && permissionStatus === 'pending') {
-      checkExistingPermissions();
-    }
-    
-    return () => {
-      if (!isActive) {
-        cleanup();
-      }
-    };
-  }, [isActive]);
-
-  // Khởi tạo signaling sau khi có media
+  // Khởi tạo signaling
   const initializeSignaling = async () => {
-    if (!isActive || !roomId || !localStream) return;
+    if (!isActive || !roomId || !localStream) {
+      console.log('⏩ Skip signaling - not ready');
+      return;
+    }
 
     try {
       console.log('🎯 Initializing WebRTC signaling...');
       setConnectionStatus('connecting');
       
       if (!socketService.isConnected) {
+        console.log('🔄 Connecting to socket...');
         await socketService.connect();
       }
 
@@ -211,6 +225,11 @@ Hoặc thử:
   // Hàm gửi signal
   const sendSignal = async (signal, retryCount = 0) => {
     try {
+      if (!socketService.isConnected || !roomId) {
+        console.warn('⏩ Skip sending signal - not connected or no roomId');
+        return false;
+      }
+
       console.log('📤 Sending signal:', signal.type, 'to:', signal.targetUserId || 'all');
       
       const userInfo = {
@@ -495,6 +514,7 @@ Hoặc thử:
     }
   };
 
+  // Xử lý user leave
   const handleUserLeave = (user) => {
     const userId = user.id;
     console.log('👋 User leaving:', userId);
@@ -634,38 +654,51 @@ Hoặc thử:
     }
   };
 
-  // Cleanup
+  // Cleanup function
   const cleanup = () => {
+    if (connectionStatus === 'disconnected') {
+      console.log('⏩ Skip cleanup - already cleaned');
+      return;
+    }
+
     console.log('🧹 Cleaning up video call...');
+    setConnectionStatus('disconnected');
+    setIsInitialized(false);
     
+    // Stop local stream
     if (localStream) {
       localStream.getTracks().forEach(track => {
-        track.stop();
-        console.log('🛑 Stopped track:', track.kind);
+        if (track.readyState === 'live') {
+          track.stop();
+          console.log('🛑 Stopped track:', track.kind);
+        }
       });
       setLocalStream(null);
     }
     
+    // Close peer connections
     peerConnections.forEach((pc, userId) => {
-      pc.close();
-      console.log('🔒 Closed peer connection with:', userId);
+      if (pc.signalingState !== 'closed') {
+        pc.close();
+        console.log('🔒 Closed peer connection with:', userId);
+      }
     });
     
     setPeerConnections(new Map());
     setRemoteStreams(new Map());
     setParticipants([]);
     setIsReadyForSignaling(false);
-    setPermissionStatus('pending');
-    setShowPermissionModal(false);
     
-    if (socketService.isConnected && roomId) {
+    // Chỉ gửi leave signal nếu thực sự active
+    if (socketService.isConnected && roomId && isActive) {
       sendSignal({
         type: 'leave',
         targetUserId: null
-      }).catch(console.error);
+      }).catch(error => {
+        console.warn('⚠️ Failed to send leave signal:', error);
+      });
     }
     
-    setConnectionStatus('disconnected');
     console.log('✅ Video call cleanup completed');
   };
 
@@ -713,7 +746,7 @@ Hoặc thử:
   
   const participantCount = participants.length + 1;
 
-  // Render các trạng thái khác nhau
+  // Render logic
   if (!isActive) return null;
 
   if (showPermissionModal) {
@@ -746,6 +779,7 @@ Hoặc thử:
               onClick={() => {
                 setPermissionStatus('pending');
                 setShowPermissionModal(true);
+                setIsInitialized(false);
               }}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
