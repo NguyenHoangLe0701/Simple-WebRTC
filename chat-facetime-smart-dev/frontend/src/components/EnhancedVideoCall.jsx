@@ -113,11 +113,17 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     };
   }, [isActive]);
 
-  // 🆕 EFFECT ĐỂ KHỞI TẠO SIGNALING KHI ĐÃ CÓ LOCAL STREAM
+  // 🆕 EFFECT ĐỂ TỰ ĐỘNG KHỞI TẠO SIGNALING KHI ĐÃ CÓ LOCAL STREAM
   useEffect(() => {
     if (isActive && localStream && roomId && !isReadyForSignaling) {
-      console.log('🎯 Conditions met for signaling initialization');
+      console.log('🎯 All conditions met for signaling:', {
+        isActive, hasLocalStream: !!localStream, roomId, isReadyForSignaling
+      });
       initializeSignaling();
+    } else {
+      console.log('⏳ Waiting for signaling conditions:', {
+        isActive, hasLocalStream: !!localStream, roomId, isReadyForSignaling
+      });
     }
   }, [isActive, localStream, roomId, isReadyForSignaling]);
 
@@ -140,7 +146,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         localVideoRef.current.srcObject = stream;
       }
       
-      console.log('✅ Media ready, signaling will be initialized automatically');
+      console.log('✅ Media ready, waiting for signaling initialization...');
       
     } catch (error) {
       console.error('❌ Media permission denied:', error);
@@ -194,6 +200,8 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
 
   // Khởi tạo signaling - ĐÃ SỬA HOÀN TOÀN
   const initializeSignaling = async () => {
+    console.log('🚀 Starting signaling initialization...');
+    
     if (!isActive || !roomId || !localStream) {
       console.log('⏩ Skip signaling - missing requirements:', {
         isActive, roomId, localStream: !!localStream
@@ -214,22 +222,16 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       if (!socketService.isConnected) {
         console.log('🔄 Connecting to socket...');
         await socketService.connect();
-        
-        // Chờ socket kết nối
-        await new Promise((resolve) => {
-          const checkConnection = setInterval(() => {
-            if (socketService.isConnected) {
-              clearInterval(checkConnection);
-              resolve();
-            }
-          }, 100);
-          
-          // Timeout sau 5 giây
-          setTimeout(() => {
-            clearInterval(checkConnection);
-            resolve();
-          }, 5000);
-        });
+      }
+
+      // Chờ socket kết nối
+      let connectionAttempts = 0;
+      const maxAttempts = 10; // 5 giây timeout
+      
+      while (!socketService.isConnected && connectionAttempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        connectionAttempts++;
+        console.log(`⏳ Waiting for socket connection... (${connectionAttempts}/${maxAttempts})`);
       }
 
       if (!socketService.isConnected) {
@@ -240,16 +242,34 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
 
       console.log('✅ Socket connected, subscribing to signaling...');
       
-      // Subscribe to signaling
-      const signalSub = await socketService.subscribeToSignaling(roomId, (messageData) => {
-        console.log('📨 Signaling message received:', messageData);
-        handleSignalingMessage(messageData);
-      });
+      // Subscribe to signaling với retry logic
+      let signalSub = null;
+      let subscriptionAttempts = 0;
+      const maxSubscriptionAttempts = 3;
+      
+      while (!signalSub && subscriptionAttempts < maxSubscriptionAttempts) {
+        try {
+          signalSub = await socketService.subscribeToSignaling(roomId, (messageData) => {
+            console.log('📨 Signaling message received:', messageData);
+            handleSignalingMessage(messageData);
+          });
+          
+          if (!signalSub) {
+            subscriptionAttempts++;
+            console.log(`🔄 Retrying subscription... (${subscriptionAttempts}/${maxSubscriptionAttempts})`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        } catch (error) {
+          subscriptionAttempts++;
+          console.error(`❌ Subscription attempt ${subscriptionAttempts} failed:`, error);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
       
       if (signalSub) {
         setConnectionStatus('connected');
         setIsReadyForSignaling(true);
-        console.log('✅ WebRTC signaling initialized');
+        console.log('✅ WebRTC signaling initialized successfully');
         
         // Gửi join signal sau khi mọi thứ đã sẵn sàng
         setTimeout(async () => {
@@ -263,10 +283,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           } catch (error) {
             console.error('❌ Failed to send join signal:', error);
           }
-        }, 1000);
+        }, 1500);
         
       } else {
-        console.error('❌ Failed to subscribe to signaling');
+        console.error('❌ Failed to subscribe to signaling after all attempts');
         setConnectionStatus('error');
       }
 
@@ -592,7 +612,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     });
   };
 
-  // 🆕 Hàm chia sẻ màn hình - ĐÃ SỬA LỖI PERMISSION
+  // Hàm chia sẻ màn hình
   const toggleScreenShare = async () => {
     try {
       if (!isScreenSharing) {
@@ -609,7 +629,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
             sampleRate: 44100
           }
         }).catch(error => {
-          // 🆕 XỬ LÝ LỖI PERMISSION TỐT HƠN
           if (error.name === 'NotAllowedError') {
             console.log('👤 User cancelled screen share permission');
             return null;
@@ -628,7 +647,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           throw new Error('Không thể lấy video track từ màn hình');
         }
         
-        // Thay thế video track trong tất cả peer connections
         peerConnections.forEach((pc, userId) => {
           const sender = pc.getSenders().find(s => 
             s.track && s.track.kind === 'video'
@@ -639,29 +657,24 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           }
         });
         
-        // Cập nhật local video hiển thị
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
         
-        // Cập nhật local stream state
         setLocalStream(screenStream);
         setIsScreenSharing(true);
         console.log('✅ Screen sharing started');
         
-        // Xử lý khi user dừng chia sẻ màn hình từ browser UI
         videoTrack.onended = async () => {
           console.log('🖥️ Screen share ended by user');
           await stopScreenShare();
         };
         
       } else {
-        // Dừng chia sẻ màn hình
         await stopScreenShare();
       }
     } catch (error) {
       console.error('❌ Error sharing screen:', error);
-      // 🆕 KHÔNG HIỂN THỊ ALERT KHI USER TỪ CHỐI
       if (error.name !== 'NotAllowedError') {
         alert('Lỗi khi chia sẻ màn hình: ' + error.message);
       }
@@ -673,7 +686,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     try {
       console.log('🖥️ Stopping screen share...');
       
-      // Dừng tất cả tracks trong stream hiện tại (screen stream)
       if (localStream) {
         localStream.getTracks().forEach(track => {
           if (track.readyState === 'live') {
@@ -682,7 +694,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         });
       }
       
-      // Khôi phục camera
       const cameraStream = await navigator.mediaDevices.getUserMedia({ 
         video: true, 
         audio: true 
@@ -691,9 +702,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       const newVideoTrack = cameraStream.getVideoTracks()[0];
       const newAudioTrack = cameraStream.getAudioTracks()[0];
       
-      // Thay thế tracks trong tất cả peer connections
       peerConnections.forEach((pc, userId) => {
-        // Thay thế video track
         const videoSender = pc.getSenders().find(s => 
           s.track && s.track.kind === 'video'
         );
@@ -702,7 +711,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           console.log('✅ Restored camera video track for:', userId);
         }
         
-        // Thay thế audio track (nếu cần)
         const audioSender = pc.getSenders().find(s => 
           s.track && s.track.kind === 'audio'
         );
@@ -712,12 +720,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         }
       });
       
-      // Cập nhật local video hiển thị
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = cameraStream;
       }
       
-      // Cập nhật state
       setLocalStream(cameraStream);
       setIsScreenSharing(false);
       console.log('✅ Screen sharing stopped, camera restored');
@@ -725,7 +731,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     } catch (error) {
       console.error('❌ Error restoring camera:', error);
       
-      // Fallback: tạo stream trống nếu không thể khôi phục camera
       const emptyStream = new MediaStream();
       setLocalStream(emptyStream);
       setIsScreenSharing(false);
