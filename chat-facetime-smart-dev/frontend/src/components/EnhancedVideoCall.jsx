@@ -13,13 +13,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
   const [peerConnections, setPeerConnections] = useState(new Map());
   const [participants, setParticipants] = useState([]);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
-  const [isReadyForSignaling, setIsReadyForSignaling] = useState(false);
   
   // State cho permission flow
   const [permissionStatus, setPermissionStatus] = useState('pending');
   const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [requestedMedia, setRequestedMedia] = useState({ video: false, audio: false });
-  const [isInitialized, setIsInitialized] = useState(false);
 
   // Modal xin quyền
   const PermissionModal = () => {
@@ -38,7 +35,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           
           <p className="text-gray-600 mb-6">
             Để tham gia cuộc gọi video, vui lòng cho phép truy cập camera và microphone. 
-            Bạn có thể thay đổi quyền này sau trong cài đặt trình duyệt.
           </p>
 
           <div className="flex space-x-3">
@@ -54,30 +50,12 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
             </button>
             
             <button
-              onClick={() => requestMediaPermission({ video: true, audio: true })}
+              onClick={() => requestMediaPermission()}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
             >
               <Camera className="h-4 w-4" />
               <span>Cho phép</span>
             </button>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <p className="text-sm text-gray-500 mb-2">Hoặc chọn thiết bị cụ thể:</p>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => requestMediaPermission({ video: true, audio: false })}
-                className="flex-1 px-3 py-2 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors text-sm"
-              >
-                Chỉ Camera
-              </button>
-              <button
-                onClick={() => requestMediaPermission({ video: false, audio: true })}
-                className="flex-1 px-3 py-2 border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-50 transition-colors text-sm"
-              >
-                Chỉ Micro
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -86,59 +64,330 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
 
   // Effect chính
   useEffect(() => {
-    if (!isActive) {
+    if (isActive) {
+      initializeCall();
+    } else {
       cleanup();
-      return;
     }
-
-    let mounted = true;
     
-    const initialize = async () => {
-      try {
-        if (mounted && permissionStatus === 'pending' && !isInitialized) {
-          await checkExistingPermissions();
-        }
-      } catch (error) {
-        console.error('❌ Initialization error:', error);
-      }
-    };
-
-    initialize();
-
     return () => {
-      mounted = false;
-      if (!isActive) {
-        cleanup();
-      }
+      cleanup();
     };
   }, [isActive]);
 
-  // 🆕 EFFECT ĐỂ TỰ ĐỘNG KHỞI TẠO SIGNALING KHI ĐÃ CÓ LOCAL STREAM
-  useEffect(() => {
-    if (isActive && localStream && roomId && !isReadyForSignaling) {
-      console.log('🎯 All conditions met for signaling:', {
-        isActive, hasLocalStream: !!localStream, roomId, isReadyForSignaling
+  // Khởi tạo call
+  const initializeCall = async () => {
+    try {
+      setConnectionStatus('initializing');
+
+      // Lấy media stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
       });
-      initializeSignaling();
-    } else {
-      console.log('⏳ Waiting for signaling conditions:', {
-        isActive, hasLocalStream: !!localStream, roomId, isReadyForSignaling
+
+      setLocalStream(stream);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+
+      await initializeSignaling();
+
+    } catch (error) {
+      console.error('Failed to initialize call:', error);
+      setConnectionStatus('error');
+      alert('Không thể khởi động video call');
+    }
+  };
+
+  // Khởi tạo signaling
+  const initializeSignaling = async () => {
+    try {
+      setConnectionStatus('connecting');
+
+      if (!socketService.isConnected) {
+        await socketService.connect();
+      }
+
+      await socketService.subscribeToSignaling(roomId, handleSignalingMessage);
+
+      setConnectionStatus('connected');
+
+      // Gửi join signal
+      await sendSignal({
+        type: 'join',
+        targetUserId: null
+      });
+
+    } catch (error) {
+      console.error('Signaling failed:', error);
+      setConnectionStatus('error');
+    }
+  };
+
+  // Gửi signal
+  const sendSignal = async (signal) => {
+    try {
+      if (!socketService.isConnected) return false;
+
+      const userInfo = {
+        id: currentUser?.id || currentUser?.username || 'unknown',
+        username: currentUser?.username || 'user', 
+        fullName: currentUser?.fullName || currentUser?.username || 'User'
+      };
+
+      const signalData = {
+        type: signal.type,
+        to: signal.targetUserId || 'all',
+        data: signal.data || {},
+        user: userInfo,
+        timestamp: new Date().toISOString()
+      };
+
+      await socketService.sendSignal(roomId, signalData);
+      return true;
+
+    } catch (error) {
+      console.error('Failed to send signal');
+      return false;
+    }
+  };
+
+  // Tạo peer connection - FIX QUAN TRỌNG
+  const createPeerConnection = (userId) => {
+    if (peerConnections.has(userId)) {
+      return peerConnections.get(userId);
+    }
+
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    });
+
+    // Thêm local tracks
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        pc.addTrack(track, localStream);
       });
     }
-  }, [isActive, localStream, roomId, isReadyForSignaling]);
+
+    // 🎯 FIX: Xử lý remote stream đúng cách
+    pc.ontrack = (event) => {
+      console.log('Received remote stream from:', userId);
+      
+      // Lấy tất cả remote streams
+      event.streams.forEach(remoteStream => {
+        setRemoteStreams(prev => {
+          const newMap = new Map(prev);
+          newMap.set(userId, remoteStream);
+          return newMap;
+        });
+      });
+    };
+
+    // 🎯 FIX: Giảm ICE candidates spam
+    let iceCandidates = [];
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        iceCandidates.push(event.candidate);
+        
+        // Gửi theo nhóm sau 300ms
+        if (iceCandidates.length === 1) {
+          setTimeout(() => {
+            if (iceCandidates.length > 0) {
+              sendSignal({
+                type: 'ice-candidate',
+                candidates: iceCandidates,
+                targetUserId: userId
+              });
+              iceCandidates = [];
+            }
+          }, 300);
+        }
+      }
+    };
+
+    // Connection state
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') {
+        console.log('Peer connected:', userId);
+      }
+    };
+
+    const newPeerConnections = new Map(peerConnections);
+    newPeerConnections.set(userId, pc);
+    setPeerConnections(newPeerConnections);
+
+    return pc;
+  };
+
+  // Tạo và gửi answer
+  const createAndSendAnswer = async (pc, userId) => {
+    try {
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      
+      await sendSignal({
+        type: 'answer',
+        answer: answer,
+        targetUserId: userId
+      });
+      
+    } catch (error) {
+      console.error('Error creating answer');
+    }
+  };
+
+  // Xử lý signaling messages - FIX: Giảm log
+  const handleSignalingMessage = async (data) => {
+    try {
+      const currentUserId = currentUser?.id || currentUser?.username;
+      const senderId = data.user?.id;
+
+      // Bỏ qua signal từ chính mình (không log)
+      if (senderId === currentUserId) return;
+
+      switch (data.type) {
+        case 'join':
+          await handleUserJoin(data.user);
+          break;
+        case 'offer':
+          await handleOffer(data);
+          break;
+        case 'answer':
+          await handleAnswer(data);
+          break;
+        case 'ice-candidate':
+          await handleIceCandidate(data);
+          break;
+        case 'leave':
+          handleUserLeave(data.user);
+          break;
+      }
+    } catch (error) {
+      console.error('Error handling signal');
+    }
+  };
+
+  // Xử lý user join
+  const handleUserJoin = async (user) => {
+    const userId = user.id;
+
+    // Thêm vào participants
+    setParticipants(prev => {
+      if (prev.find(p => p.id === userId)) return prev;
+      return [...prev, user];
+    });
+
+    // Tạo peer connection và offer
+    const pc = createPeerConnection(userId);
+
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      await sendSignal({
+        type: 'offer',
+        offer: offer,
+        targetUserId: userId
+      });
+
+    } catch (error) {
+      console.error('Failed to create offer');
+    }
+  };
+
+  // Xử lý offer
+  const handleOffer = async (data) => {
+    const userId = data.user?.id;
+
+    let pc = peerConnections.get(userId);
+    if (!pc) {
+      pc = createPeerConnection(userId);
+    }
+
+    try {
+      await pc.setRemoteDescription(data.offer);
+      await createAndSendAnswer(pc, userId);
+
+    } catch (error) {
+      console.error('Failed to handle offer');
+    }
+  };
+
+  // Xử lý answer
+  const handleAnswer = async (data) => {
+    const userId = data.user?.id;
+
+    const pc = peerConnections.get(userId);
+    if (pc) {
+      try {
+        await pc.setRemoteDescription(data.answer);
+      } catch (error) {
+        console.error('Failed to set remote description');
+      }
+    }
+  };
+
+  // Xử lý ICE candidate - FIX: Xử lý nhiều candidates
+  const handleIceCandidate = async (data) => {
+    const userId = data.user?.id;
+    
+    const pc = peerConnections.get(userId);
+    if (pc) {
+      try {
+        if (data.candidates) {
+          for (const candidate of data.candidates) {
+            await pc.addIceCandidate(candidate);
+          }
+        } else if (data.candidate) {
+          await pc.addIceCandidate(data.candidate);
+        }
+      } catch (error) {
+        // Bỏ qua lỗi ICE candidate
+      }
+    }
+  };
+
+  // Xử lý user leave
+  const handleUserLeave = (user) => {
+    const userId = user.id;
+
+    // Remove from participants
+    setParticipants(prev => prev.filter(p => p.id !== userId));
+
+    // Close peer connection
+    const pc = peerConnections.get(userId);
+    if (pc) {
+      pc.close();
+      setPeerConnections(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(userId);
+        return newMap;
+      });
+    }
+
+    // Remove remote stream
+    setRemoteStreams(prev => {
+      const newMap = new Map(prev);
+      newMap.delete(userId);
+      return newMap;
+    });
+  };
 
   // Hàm xin quyền
-  const requestMediaPermission = async (constraints = { video: true, audio: true }) => {
+  const requestMediaPermission = async () => {
     try {
       setPermissionStatus('requesting');
       setShowPermissionModal(false);
-      setRequestedMedia(constraints);
       
-      console.log('🎥 Requesting media with constraints:', constraints);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true
+      });
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      console.log('✅ Media permission granted');
       setPermissionStatus('granted');
       setLocalStream(stream);
       
@@ -146,33 +395,16 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         localVideoRef.current.srcObject = stream;
       }
       
-      console.log('✅ Media ready, waiting for signaling initialization...');
+      await initializeSignaling();
       
     } catch (error) {
-      console.error('❌ Media permission denied:', error);
       setPermissionStatus('denied');
-      
-      let errorMessage = 'Không thể truy cập thiết bị. ';
-      
-      if (error.name === 'NotAllowedError') {
-        errorMessage += 'Bạn đã từ chối cấp quyền. Vui lòng refresh trang và đồng ý cấp quyền.';
-      } else if (error.name === 'NotFoundError') {
-        errorMessage += 'Không tìm thấy camera/microphone.';
-      } else {
-        errorMessage += error.message;
-      }
-      
-      alert(errorMessage);
+      alert('Không thể truy cập camera/microphone');
     }
   };
 
   // Kiểm tra permissions hiện có
   const checkExistingPermissions = async () => {
-    if (isInitialized) {
-      console.log('⏩ Skip permission check - already initialized');
-      return;
-    }
-
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const hasCameraPermission = devices.some(device => 
@@ -183,615 +415,46 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       );
       
       if (hasCameraPermission && hasMicPermission) {
-        console.log('✅ Already have media permissions');
-        await requestMediaPermission({ video: true, audio: true });
+        await requestMediaPermission();
       } else {
-        console.log('🟡 Showing permission modal');
         setShowPermissionModal(true);
       }
       
-      setIsInitialized(true);
     } catch (error) {
-      console.warn('⚠️ Cannot check existing permissions:', error);
       setShowPermissionModal(true);
-      setIsInitialized(true);
     }
   };
 
-  // Khởi tạo signaling - ĐÃ SỬA HOÀN TOÀN
-  const initializeSignaling = async () => {
-    console.log('🚀 Starting signaling initialization...');
-    
-    if (!isActive || !roomId || !localStream) {
-      console.log('⏩ Skip signaling - missing requirements:', {
-        isActive, roomId, localStream: !!localStream
-      });
-      return;
-    }
-
-    if (isReadyForSignaling) {
-      console.log('⏩ Skip signaling - already ready');
-      return;
-    }
-
-    try {
-      console.log('🎯 Initializing WebRTC signaling...');
-      setConnectionStatus('connecting');
-      
-      // Đảm bảo socket kết nối
-      if (!socketService.isConnected) {
-        console.log('🔄 Connecting to socket...');
-        await socketService.connect();
-      }
-
-      // Chờ socket kết nối
-      let connectionAttempts = 0;
-      const maxAttempts = 10; // 5 giây timeout
-      
-      while (!socketService.isConnected && connectionAttempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        connectionAttempts++;
-        console.log(`⏳ Waiting for socket connection... (${connectionAttempts}/${maxAttempts})`);
-      }
-
-      if (!socketService.isConnected) {
-        console.error('❌ Socket not connected after waiting');
-        setConnectionStatus('error');
-        return;
-      }
-
-      console.log('✅ Socket connected, subscribing to signaling...');
-      
-      // Subscribe to signaling với retry logic
-      let signalSub = null;
-      let subscriptionAttempts = 0;
-      const maxSubscriptionAttempts = 3;
-      
-      while (!signalSub && subscriptionAttempts < maxSubscriptionAttempts) {
-        try {
-          signalSub = await socketService.subscribeToSignaling(roomId, (messageData) => {
-            console.log('📨 Signaling message received:', messageData);
-            handleSignalingMessage(messageData);
-          });
-          
-          if (!signalSub) {
-            subscriptionAttempts++;
-            console.log(`🔄 Retrying subscription... (${subscriptionAttempts}/${maxSubscriptionAttempts})`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        } catch (error) {
-          subscriptionAttempts++;
-          console.error(`❌ Subscription attempt ${subscriptionAttempts} failed:`, error);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      if (signalSub) {
-        setConnectionStatus('connected');
-        setIsReadyForSignaling(true);
-        console.log('✅ WebRTC signaling initialized successfully');
-        
-        // Gửi join signal sau khi mọi thứ đã sẵn sàng
-        setTimeout(async () => {
-          try {
-            console.log('📤 Sending join signal...');
-            await sendSignal({
-              type: 'join',
-              targetUserId: null
-            });
-            console.log('✅ Join signal sent successfully');
-          } catch (error) {
-            console.error('❌ Failed to send join signal:', error);
-          }
-        }, 1500);
-        
-      } else {
-        console.error('❌ Failed to subscribe to signaling after all attempts');
-        setConnectionStatus('error');
-      }
-
-    } catch (error) {
-      console.error('❌ WebRTC signaling initialization error:', error);
-      setConnectionStatus('error');
-    }
-  };
-
-  // Hàm gửi signal
-  const sendSignal = async (signal, retryCount = 0) => {
-    try {
-      if (!socketService.isConnected || !roomId) {
-        console.warn('⏩ Skip sending signal - not connected or no roomId');
-        return false;
-      }
-
-      console.log('📤 Sending signal:', signal.type, 'to:', signal.targetUserId || 'all');
-      
-      const userInfo = {
-        id: currentUser?.id || currentUser?.username || 'unknown',
-        username: currentUser?.username || 'user', 
-        fullName: currentUser?.fullName || currentUser?.username || 'User'
-      };
-      
-      const signalData = {
-        type: signal.type,
-        to: signal.targetUserId || 'all',
-        data: signal.data || {},
-        user: userInfo,
-        timestamp: new Date().toISOString()
-      };
-      
-      console.log('📨 Signal data being sent');
-      await socketService.sendSignal(roomId, signalData);
-      return true;
-    } catch (error) {
-      console.error('❌ Error sending signal:', error);
-      
-      if (retryCount < 2) {
-        console.log(`🔄 Retrying signal (${retryCount + 1}/2)...`);
-        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
-        return sendSignal(signal, retryCount + 1);
-      }
-      
-      return false;
-    }
-  };
-
-  // Tạo peer connection
-  const createPeerConnection = (userId) => {
-    console.log('🔄 Creating peer connection for:', userId);
-    
-    if (peerConnections.has(userId)) {
-      console.log('⏩ Peer connection already exists for:', userId);
-      return peerConnections.get(userId);
-    }
-
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ],
-      iceCandidatePoolSize: 10
-    });
-
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        console.log('➕ Adding local track:', track.kind, 'to:', userId);
-        pc.addTrack(track, localStream);
-      });
-    } else {
-      console.warn('⚠️ No local stream available when creating PC for:', userId);
-    }
-
-    pc.ontrack = (event) => {
-      console.log('🎬 Received remote track from:', userId, event.track.kind);
-      const [remoteStream] = event.streams;
-      
-      if (remoteStream) {
-        setRemoteStreams(prev => {
-          const newMap = new Map(prev);
-          newMap.set(userId, remoteStream);
-          return newMap;
-        });
-        
-        if (pc.remoteDescription && !pc.localDescription) {
-          console.log('🔄 Auto-creating answer for:', userId);
-          createAndSendAnswer(pc, userId);
-        }
-      }
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        console.log('🧊 Sending ICE candidate to:', userId);
-        sendSignal({
-          type: 'ice-candidate',
-          candidate: event.candidate,
-          targetUserId: userId
-        });
-      }
-    };
-
-    pc.onconnectionstatechange = () => {
-      console.log(`🔗 ${userId} connection state:`, pc.connectionState);
-      if (pc.connectionState === 'connected') {
-        console.log('✅ Peer connection established with:', userId);
-      }
-    };
-
-    pc.oniceconnectionstatechange = () => {
-      console.log(`🧊 ${userId} ICE state:`, pc.iceConnectionState);
-    };
-
-    const newPeerConnections = new Map(peerConnections);
-    newPeerConnections.set(userId, pc);
-    setPeerConnections(newPeerConnections);
-    
-    return pc;
-  };
-
-  // Hàm tạo và gửi answer
-  const createAndSendAnswer = async (pc, userId) => {
-    try {
-      console.log('📝 Creating answer for:', userId);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      
-      await sendSignal({
-        type: 'answer',
-        answer: answer,
-        targetUserId: userId
-      });
-      
-      console.log('✅ Answer sent to:', userId);
-    } catch (error) {
-      console.error('❌ Error creating answer for', userId, error);
-    }
-  };
-
-  // Xử lý signaling message
-  const handleSignalingMessage = async (data) => {
-    try {
-      const currentUserId = currentUser?.id || currentUser?.username;
-      const senderId = data.user?.id;
-      
-      console.log('📨 Processing signal:', data.type, 'from:', senderId);
-      
-      if (senderId === currentUserId) {
-        console.log('⏩ Skipping own signal');
-        return;
-      }
-
-      switch (data.type) {
-        case 'join':
-          console.log('👋 User joined call:', senderId);
-          await handleUserJoin(data.user);
-          break;
-          
-        case 'leave':
-          console.log('👋 User left call:', senderId);
-          handleUserLeave(data.user);
-          break;
-          
-        case 'offer':
-          console.log('📨 Received offer from:', senderId);
-          await handleOffer(data);
-          break;
-          
-        case 'answer':
-          console.log('📨 Received answer from:', senderId);
-          await handleAnswer(data);
-          break;
-          
-        case 'ice-candidate':
-          console.log('🧊 Received ICE candidate from:', senderId);
-          await handleIceCandidate(data);
-          break;
-          
-        case 'user-joined':
-          console.log('👤 User joined notification:', senderId);
-          setParticipants(prev => {
-            if (prev.find(p => p.id === senderId)) return prev;
-            return [...prev, data.user];
-          });
-          break;
-          
-        default:
-          console.warn('⚠️ Unknown signal type:', data.type);
-      }
-    } catch (error) {
-      console.error('❌ Error handling signaling message:', error);
-    }
-  };
-
-  // Xử lý user join
-  const handleUserJoin = async (user) => {
-    const userId = user.id;
-    console.log('👋 Handling user join:', userId);
-    
-    setParticipants(prev => {
-      if (prev.find(p => p.id === userId)) return prev;
-      return [...prev, user];
-    });
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    const pc = createPeerConnection(userId);
-    
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('📝 Creating offer for:', userId);
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      
-      console.log('📨 Sending offer to:', userId);
-      await sendSignal({
-        type: 'offer',
-        offer: offer,
-        targetUserId: userId
-      });
-      
-    } catch (error) {
-      console.error('❌ Error creating offer for', userId, error);
-    }
-  };
-
-  // Xử lý offer
-  const handleOffer = async (data) => {
-    const userId = data.user?.id;
-    console.log('📨 Handling offer from:', userId);
-    
-    if (!localStream) {
-      console.warn('⚠️ No local stream available, delaying offer handling...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-    
-    let pc = peerConnections.get(userId);
-    if (!pc) {
-      pc = createPeerConnection(userId);
-    }
-    
-    try {
-      await pc.setRemoteDescription(data.offer);
-      await createAndSendAnswer(pc, userId);
-      
-    } catch (error) {
-      console.error('❌ Error handling offer from', userId, error);
-    }
-  };
-
-  // Xử lý answer
-  const handleAnswer = async (data) => {
-    const userId = data.user?.id;
-    console.log('📨 Handling answer from:', userId);
-    
-    const pc = peerConnections.get(userId);
-    if (pc) {
-      try {
-        if (pc.signalingState !== 'stable') {
-          console.log('⏳ Waiting for stable signaling state for:', userId);
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        
-        await pc.setRemoteDescription(data.answer);
-        console.log('✅ Remote description set for:', userId);
-      } catch (error) {
-        console.error('❌ Error handling answer from', userId, error);
-      }
-    } else {
-      console.warn('⚠️ No peer connection found for answer from:', userId);
-    }
-  };
-
-  // Xử lý ICE candidate
-  const handleIceCandidate = async (data) => {
-    const userId = data.user?.id;
-    console.log('🧊 Handling ICE candidate from:', userId);
-    
-    const pc = peerConnections.get(userId);
-    if (pc && data.candidate) {
-      try {
-        if (pc.remoteDescription) {
-          await pc.addIceCandidate(data.candidate);
-          console.log('✅ ICE candidate added for:', userId);
-        } else {
-          console.log('⏳ Delaying ICE candidate - waiting for remote description...');
-          setTimeout(() => {
-            if (pc.remoteDescription) {
-              pc.addIceCandidate(data.candidate);
-            }
-          }, 1000);
-        }
-      } catch (error) {
-        console.error('❌ Error adding ICE candidate from', userId, error);
-      }
-    }
-  };
-
-  // Xử lý user leave
-  const handleUserLeave = (user) => {
-    const userId = user.id;
-    console.log('👋 User leaving:', userId);
-    
-    setParticipants(prev => prev.filter(p => p.id !== userId));
-    
-    const pc = peerConnections.get(userId);
-    if (pc) {
-      pc.close();
-      setPeerConnections(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(userId);
-        return newMap;
-      });
-    }
-    
-    setRemoteStreams(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(userId);
-      return newMap;
-    });
-  };
-
-  // Hàm chia sẻ màn hình
-  const toggleScreenShare = async () => {
-    try {
-      if (!isScreenSharing) {
-        console.log('🖥️ Starting screen share...');
-        
-        const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: {
-            cursor: 'always',
-            displaySurface: 'window'
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 44100
-          }
-        }).catch(error => {
-          if (error.name === 'NotAllowedError') {
-            console.log('👤 User cancelled screen share permission');
-            return null;
-          }
-          throw error;
-        });
-
-        if (!screenStream) {
-          console.log('⏩ Screen share cancelled by user');
-          return;
-        }
-        
-        const videoTrack = screenStream.getVideoTracks()[0];
-        
-        if (!videoTrack) {
-          throw new Error('Không thể lấy video track từ màn hình');
-        }
-        
-        peerConnections.forEach((pc, userId) => {
-          const sender = pc.getSenders().find(s => 
-            s.track && s.track.kind === 'video'
-          );
-          if (sender) {
-            sender.replaceTrack(videoTrack);
-            console.log('✅ Replaced video track for:', userId);
-          }
-        });
-        
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = screenStream;
-        }
-        
-        setLocalStream(screenStream);
-        setIsScreenSharing(true);
-        console.log('✅ Screen sharing started');
-        
-        videoTrack.onended = async () => {
-          console.log('🖥️ Screen share ended by user');
-          await stopScreenShare();
-        };
-        
-      } else {
-        await stopScreenShare();
-      }
-    } catch (error) {
-      console.error('❌ Error sharing screen:', error);
-      if (error.name !== 'NotAllowedError') {
-        alert('Lỗi khi chia sẻ màn hình: ' + error.message);
-      }
-    }
-  };
-
-  // Hàm dừng chia sẻ màn hình
-  const stopScreenShare = async () => {
-    try {
-      console.log('🖥️ Stopping screen share...');
-      
-      if (localStream) {
-        localStream.getTracks().forEach(track => {
-          if (track.readyState === 'live') {
-            track.stop();
-          }
-        });
-      }
-      
-      const cameraStream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
-      });
-      
-      const newVideoTrack = cameraStream.getVideoTracks()[0];
-      const newAudioTrack = cameraStream.getAudioTracks()[0];
-      
-      peerConnections.forEach((pc, userId) => {
-        const videoSender = pc.getSenders().find(s => 
-          s.track && s.track.kind === 'video'
-        );
-        if (videoSender && newVideoTrack) {
-          videoSender.replaceTrack(newVideoTrack);
-          console.log('✅ Restored camera video track for:', userId);
-        }
-        
-        const audioSender = pc.getSenders().find(s => 
-          s.track && s.track.kind === 'audio'
-        );
-        if (audioSender && newAudioTrack) {
-          audioSender.replaceTrack(newAudioTrack);
-          console.log('✅ Restored camera audio track for:', userId);
-        }
-      });
-      
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = cameraStream;
-      }
-      
-      setLocalStream(cameraStream);
-      setIsScreenSharing(false);
-      console.log('✅ Screen sharing stopped, camera restored');
-      
-    } catch (error) {
-      console.error('❌ Error restoring camera:', error);
-      
-      const emptyStream = new MediaStream();
-      setLocalStream(emptyStream);
-      setIsScreenSharing(false);
-      
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = emptyStream;
-      }
-      
-      alert('Không thể khôi phục camera sau khi chia sẻ màn hình');
-    }
-  };
-
-  // Cleanup function
+  // Cleanup
   const cleanup = () => {
-    if (connectionStatus === 'disconnected') {
-      console.log('⏩ Skip cleanup - already cleaned');
-      return;
-    }
+    if (connectionStatus === 'disconnected') return;
 
-    console.log('🧹 Cleaning up video call...');
     setConnectionStatus('disconnected');
-    setIsInitialized(false);
-    setIsReadyForSignaling(false);
     
     // Stop local stream
     if (localStream) {
-      localStream.getTracks().forEach(track => {
-        if (track.readyState === 'live') {
-          track.stop();
-          console.log('🛑 Stopped track:', track.kind);
-        }
-      });
+      localStream.getTracks().forEach(track => track.stop());
       setLocalStream(null);
     }
     
     // Close peer connections
     peerConnections.forEach((pc, userId) => {
-      if (pc.signalingState !== 'closed') {
-        pc.close();
-        console.log('🔒 Closed peer connection with:', userId);
-      }
+      pc.close();
     });
-    
     setPeerConnections(new Map());
     setRemoteStreams(new Map());
     setParticipants([]);
     
-    // Chỉ gửi leave signal nếu thực sự active
-    if (socketService.isConnected && roomId && isActive) {
+    // Send leave signal
+    if (socketService.isConnected && roomId) {
       sendSignal({
         type: 'leave',
         targetUserId: null
-      }).catch(error => {
-        console.warn('⚠️ Failed to send leave signal:', error);
       });
     }
-    
-    console.log('✅ Video call cleanup completed');
   };
 
-  // Các hàm toggle
+  // Controls (giữ nguyên)
   const toggleMute = () => {
     if (localStream) {
       const audioTracks = localStream.getAudioTracks();
@@ -809,6 +472,72 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         track.enabled = !track.enabled;
       });
       setIsVideoOff(!videoTracks[0]?.enabled);
+    }
+  };
+
+  const toggleScreenShare = async () => {
+    try {
+      if (!isScreenSharing) {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true
+        });
+
+        const videoTrack = screenStream.getVideoTracks()[0];
+        
+        // Replace video tracks
+        peerConnections.forEach((pc, userId) => {
+          const sender = pc.getSenders().find(s => 
+            s.track && s.track.kind === 'video'
+          );
+          if (sender) {
+            sender.replaceTrack(videoTrack);
+          }
+        });
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = screenStream;
+        }
+
+        setLocalStream(screenStream);
+        setIsScreenSharing(true);
+
+        videoTrack.onended = () => {
+          toggleScreenShare();
+        };
+
+      } else {
+        // Stop screen share and restore camera
+        if (localStream) {
+          localStream.getTracks().forEach(track => track.stop());
+        }
+
+        const cameraStream = await navigator.mediaDevices.getUserMedia({ 
+          video: true, 
+          audio: true 
+        });
+
+        const newVideoTrack = cameraStream.getVideoTracks()[0];
+        
+        // Restore video tracks
+        peerConnections.forEach((pc, userId) => {
+          const sender = pc.getSenders().find(s => 
+            s.track && s.track.kind === 'video'
+          );
+          if (sender && newVideoTrack) {
+            sender.replaceTrack(newVideoTrack);
+          }
+        });
+
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = cameraStream;
+        }
+
+        setLocalStream(cameraStream);
+        setIsScreenSharing(false);
+      }
+    } catch (error) {
+      console.error('Screen share error');
     }
   };
 
@@ -868,7 +597,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
               onClick={() => {
                 setPermissionStatus('pending');
                 setShowPermissionModal(true);
-                setIsInitialized(false);
               }}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
