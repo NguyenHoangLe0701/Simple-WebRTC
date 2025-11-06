@@ -29,7 +29,6 @@ import EnhancedVideoCall from '../components/EnhancedVideoCall';
 import CodeEditor from '../components/CodeEditor';
 import { Virtuoso } from 'react-virtuoso';
 import socketService from '../services/socket';
-// Lightweight inline emoji picker (no external lib to avoid peer deps)
 
 const ChatRoom = () => {
   const { roomId = 'general' } = useParams();
@@ -71,115 +70,102 @@ const ChatRoom = () => {
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
   const [replyTo, setReplyTo] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
   
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
   const dropRef = useRef(null);
 
+  // 🆕 THÊM DEBUG EFFECTS
   useEffect(() => {
-    if (!currentUser) return; // Prevent anonymous socket actions before auth
-    // Reset messages when changing rooms
+    console.log('🔍 Current user:', currentUser);
+  }, [currentUser]);
+
+  useEffect(() => {
+    console.log('🔍 Online users:', onlineUsers);
+  }, [onlineUsers]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+
     setMessages([]);
     setOnlineUsers([]);
+    setConnectionStatus('connecting');
     
     let chatSub, presenceSub, signalSub;
-    const username = currentUser?.fullName || currentUser?.username || 'User';
+    let cleanupCalled = false;
     
-    (async () => {
+    const initializeSocket = async () => {
       try {
-        // Ensure socket is connected first
-        if (!socketService.isConnected) {
-          console.log('Connecting socket...');
-          await socketService.connect(); 
-        }
+        console.log('🔄 Initializing socket connection...');
         
-        // Wait a bit for connection to stabilize
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const connected = await socketService.ensureConnected();
         
-        setIsConnected(socketService.isConnected);
-        
-        if (!socketService.isConnected) {
-          console.error('Socket failed to connect');
+        if (!connected) {
+          console.error('❌ Failed to establish socket connection');
+          setIsConnected(false);
+          setConnectionStatus('disconnected');
           return;
         }
         
-        console.log('Socket connected. Subscribing to topics then joining room:', roomId);
+        setIsConnected(true);
+        setConnectionStatus('connected');
+        console.log('✅ Socket connected, setting up subscriptions...');
         
-        // Subscribe to chat messages first
-        chatSub = socketService.subscribeToChat(roomId, (messageFrame) => {
+        // 🆕 SỬA: XỬ LÝ MESSAGE ĐÚNG CÁCH
+       // 🆕 SỬA: XỬ LÝ MESSAGE NHẬN ĐƯỢC ĐÚNG CÁCH
+chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
+  try {
+    console.log('💬 ======= RAW MESSAGE RECEIVED =======');
+    console.log('💬 Full message data:', messageData);
+    
+    if (!messageData) {
+      console.warn('💬 Message data is null or undefined');
+      return;
+    }
+    
+    // 🆕 XỬ LÝ ĐÚNG FORMAT TỪ BACKEND
+    const processedMessage = {
+      id: messageData.id || `msg_${Date.now()}`,
+      sender: messageData.sender || messageData.senderName || 'Unknown',
+      senderId: messageData.senderId || messageData.sender,
+      content: messageData.content,
+      timestamp: messageData.timestamp || new Date().toISOString(),
+      type: messageData.type || 'text',
+      roomId: messageData.roomId || roomId,
+      avatar: messageData.avatar || (messageData.sender || 'U').charAt(0).toUpperCase()
+    };
+    
+    console.log('💬 Processed message:', processedMessage);
+    
+    setMessages(prev => {
+      const existingMsg = prev.find(m => m.id === processedMessage.id);
+      if (existingMsg) {
+        console.log('💬 Message already exists in state');
+        return prev;
+      }
+      console.log('💬 ✅ Adding new message to state');
+      return [...prev, processedMessage];
+    });
+    
+  } catch (e) {
+    console.error('Error processing chat message:', e);
+  }
+});
+        // 🆕 SỬA: XỬ LÝ PRESENCE ĐÚNG CÁCH
+        presenceSub = await socketService.subscribeToPresence(roomId, (presenceData) => {
           try {
-            console.log('=== RECEIVED MESSAGE FRAME ===');
-            console.log('Room:', roomId);
-            console.log('Frame body:', messageFrame.body);
-            console.log('Frame headers:', messageFrame.headers);
+            console.log('👥 Raw presence data:', presenceData);
             
-            const payload = JSON.parse(messageFrame.body);
-            console.log('Parsed payload:', payload);
-            
-            // Validate payload
-            if (!payload || !payload.id || !payload.content) {
-              console.warn('Invalid message payload:', payload);
-              return;
-            }
-            
-            setMessages(prev => {
-              // Avoid duplicates by checking id
-              const existingMsg = prev.find(m => m.id === payload.id);
-              if (existingMsg) {
-                console.log('⚠️ Duplicate message ignored:', payload.id);
-                console.log('  Existing message:', existingMsg);
-                console.log('  Incoming message:', payload);
-                return prev;
-              }
-              
-              console.log('✅ Adding new message to chat:', payload.id);
-              console.log('  Sender:', payload.sender);
-              console.log('  Content:', payload.content);
-              console.log('  Timestamp:', payload.timestamp);
-              
-              // Return new array with the message
-              const newMessages = [...prev, payload];
-              console.log('📊 Total messages after adding:', newMessages.length);
-              console.log('  Previous count:', prev.length);
-              console.log('  All message IDs:', newMessages.map(m => m.id));
-              
-              return newMessages;
-            });
-          } catch (e) {
-            console.error('❌ Error parsing chat message:', e);
-            console.error('Raw body:', messageFrame.body);
-          }
-        });
-        
-        if (chatSub) {
-          console.log('✅ Successfully subscribed to chat:', `/topic/chat/${roomId}`);
-        } else {
-          console.error('❌ Failed to subscribe to chat:', `/topic/chat/${roomId}`);
-        }
-        
-        // Subscribe to presence updates
-        presenceSub = socketService.subscribeToPresence(roomId, (messageFrame) => {
-          try {
-            const payload = JSON.parse(messageFrame.body);
-            console.log('Received presence update:', payload);
-            if (payload?.users) {
-              const usersList = payload.users.map(u => ({ 
-                id: u.id || u.username, 
-                name: u.fullName || u.username, 
-                avatar: (u.fullName || u.username || 'U').charAt(0).toUpperCase(), 
+            if (presenceData?.users) {
+              const usersList = presenceData.users.map(u => ({ 
+                id: u.id || u.userId || u.username, 
+                name: u.fullName || u.name || u.username, 
+                avatar: (u.fullName || u.name || u.username || 'U').charAt(0).toUpperCase(), 
                 status: u.status || 'online' 
               }));
-              // Always include current user in the list
-              const currentUserInList = usersList.find(u => u.id === (currentUser?.id || currentUser?.username));
-              if (!currentUserInList && currentUser) {
-                usersList.push({
-                  id: currentUser.id || currentUser.username,
-                  name: currentUser.fullName || currentUser.username,
-                  avatar: (currentUser.fullName || currentUser.username || 'U').charAt(0).toUpperCase(),
-                  status: 'online'
-                });
-              }
-              console.log('Setting online users:', usersList);
+              
+              console.log('👥 Processed users list:', usersList);
               setOnlineUsers(usersList);
             }
           } catch (e) {
@@ -187,52 +173,59 @@ const ChatRoom = () => {
           }
         });
         
-        console.log('Subscribed to presence:', `/topic/presence/${roomId}`);
-        
-        // Subscribe to signaling for video calls
-        signalSub = socketService.subscribeToSignaling(roomId, (frame) => {
-          try {
-            const data = JSON.parse(frame.body);
-            console.log('Received signaling:', data);
-            // Handle join/leave events for presence
-            if (data.type === 'join' || data.type === 'leave') {
-              // Presence will be updated via presence subscription
-            }
-          } catch (e) {
-            console.error('Error parsing signaling message:', e);
-          }
-        });
-        
-        console.log('Subscribed to signaling:', `/topic/room/${roomId}`);
+       
 
-        // After subscriptions are ready, send join so presence/chat reflects immediately
-        const userId = currentUser?.id || currentUser?.userId || currentUser?.username || username;
-        console.log('Joining room with userId:', userId, 'username:', username);
-        socketService.joinRoom(roomId, username, {
-          id: userId,
-          userId: userId,
-          fullName: currentUser?.fullName || username,
-          name: currentUser?.fullName || currentUser?.username || username,
+        // 🆕 SỬA QUAN TRỌNG: GỬI ĐÚNG USER DATA
+        const userData = {
+          id: currentUser?.id || currentUser?.userId || currentUser?.username,
+          userId: currentUser?.id || currentUser?.userId || currentUser?.username,
+          username: currentUser?.username || 'user',
+          fullName: currentUser?.fullName || currentUser?.username || 'User',
+          name: currentUser?.fullName || currentUser?.username || 'User',
           email: currentUser?.email || ''
-        });
-      } catch (e) {
-        console.error('Error in socket setup:', e);
+        };
+
+        console.log('👤 Joining room with user data:', userData);
+        
+        await socketService.joinRoom(roomId, userData);
+        console.log('✅ Successfully joined room:', roomId);
+        
+      } catch (error) {
+        console.error('❌ Error in socket setup:', error);
+        setIsConnected(false);
+        setConnectionStatus('error');
       }
-    })();
+    };
+
+    initializeSocket();
     
     return () => {
-      try { 
-        socketService.leaveRoom(roomId, username); 
-      } catch (e) {
-        console.error('Error leaving room:', e);
-      }
-      if (chatSub) socketService.unsubscribe(`/topic/chat/${roomId}`);
-      if (presenceSub) socketService.unsubscribe(`/topic/presence/${roomId}`);
-      if (signalSub) socketService.unsubscribe(`/topic/room/${roomId}`);
+      if (cleanupCalled) return;
+      cleanupCalled = true;
+      
+      console.log('🧹 Cleaning up socket connections...');
+      const cleanup = async () => {
+        try {
+          const username = currentUser?.fullName || currentUser?.username || 'User';
+          console.log('🚪 Leaving room:', roomId, 'as', username);
+          await socketService.leaveRoom(roomId, username);
+        } catch (e) {
+          console.warn('⚠️ Error during cleanup (ignored):', e);
+        }
+        
+        // Unsubscribe các subscription - CHỈ UNSUBSCRIBE CHAT VÀ PRESENCE
+        if (chatSub) socketService.unsubscribe(`/topic/chat/${roomId}`);
+        if (presenceSub) socketService.unsubscribe(`/topic/presence/${roomId}`);
+        // 🚫 KHÔNG UNSUBSCRIBE SIGNALING Ở ĐÂY
+        
+        console.log('✅ Cleanup completed');
+      };
+      
+      cleanup();
     };
   }, [roomId, currentUser]);
 
-  // Drag & drop upload
+  // Drag & drop upload (giữ nguyên)
   useEffect(() => {
     const el = dropRef.current;
     if (!el) return;
@@ -256,122 +249,123 @@ const ChatRoom = () => {
     };
   }, []);
 
-  // Virtuoso handles scrolling efficiently; no manual scrolling needed
-
-  const sendMessage = () => {
+  // 🆕 SỬA: SEND MESSAGE
+  const sendMessage = async () => {
     if (!newMessage.trim()) return;
     
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const senderId = currentUser?.id || currentUser?.userId || currentUser?.username || 'unknown';
     const senderName = currentUser?.fullName || currentUser?.username || 'You';
     
+    // 🆕 SỬA: GỬI ĐÚNG FORMAT BACKEND MONG ĐỢI
     const message = {
       id: messageId,
-      sender: senderName,
-      senderId: senderId,
+      sender: senderName,        // 👈 QUAN TRỌNG: backend dùng field này
+      senderId: senderId,        // 👈 QUAN TRỌNG  
       content: newMessage.trim(),
+      type: 'text',              // 👈 QUAN TRỌNG: phải là string 'text'
+      roomId: roomId,            // 👈 THÊM roomId
       timestamp: new Date().toISOString(),
-      type: 'text',
-      roomId: roomId,
-      avatar: senderName.charAt(0).toUpperCase(),
-      replyTo: replyTo ? { id: replyTo.id, sender: replyTo.sender, preview: String(replyTo.content).slice(0, 100) } : undefined,
-      reactions: {}
+      avatar: senderName.charAt(0).toUpperCase()
     };
     
-    console.log('=== SENDING MESSAGE ===');
-    console.log('Room:', roomId);
-    console.log('Sender ID:', senderId);
-    console.log('Sender Name:', senderName);
-    console.log('Message:', JSON.stringify(message, null, 2));
+    console.log('📤 Sending message to backend:', message);
     
-    // Optimistic update - chỉ thêm message tạm thời
+    // Optimistic update
     setMessages(prev => {
-      // Kiểm tra xem đã có message này chưa (tránh duplicate)
-      if (prev.find(m => m.id === messageId)) {
-        return prev;
-      }
+      if (prev.find(m => m.id === messageId)) return prev;
       return [...prev, message];
     });
     
-    // Send via socket
-    if (socketService.isConnected) {
-      try {
-        console.log('📤 Calling sendMessage...');
-        console.log('  RoomId:', roomId);
-        console.log('  Message:', message);
-        socketService.sendMessage(roomId, message);
-        console.log('✅ sendMessage called successfully');
-      } catch (err) {
-        console.error('❌ Error sending message:', err);
-        // Remove optimistic update on error
-        setMessages(prev => {
-          const filtered = prev.filter(m => m.id !== messageId);
-          console.log('Removed message from state, count:', filtered.length);
-          return filtered;
-        });
-      }
-    } else {
-      console.warn('⚠️ Socket not connected, attempting to connect...');
-      console.log('Socket connection state:', socketService.isConnected);
-      // Remove optimistic update if can't send
+    try {
+      await socketService.sendMessage(roomId, message);
+      console.log('✅ Message sent successfully');
+    } catch (err) {
+      console.error('❌ Error sending message:', err);
+      // Rollback optimistic update
       setMessages(prev => prev.filter(m => m.id !== messageId));
-      
-      // Try to reconnect
-      socketService.connect().then(() => {
-        if (socketService.isConnected) {
-          console.log('✅ Reconnected, sending message...');
-          socketService.sendMessage(roomId, message);
-        } else {
-          console.error('❌ Reconnection failed - still not connected');
-        }
-      }).catch(err => {
-        console.error('❌ Failed to reconnect:', err);
-      });
+      alert('Không thể gửi tin nhắn. Vui lòng thử lại.');
     }
     
     setNewMessage('');
     setReplyTo(null);
   };
 
-  const sendCode = (codeData) => {
+  // 🆕 SỬA: SEND CODE
+  const sendCode = async (codeData) => {
+    const messageId = `code_${Date.now()}`;
+    const senderName = currentUser?.fullName || currentUser?.username || 'You';
+    
     const message = {
-      id: Date.now(),
-      sender: 'You',
+      id: messageId,
+      sender: senderName,
+      senderId: currentUser?.id || currentUser?.username,
       content: codeData.content,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
       type: 'code',
       language: codeData.language,
       fileName: codeData.fileName,
-      avatar: 'Y'
+      avatar: senderName.charAt(0).toUpperCase(),
+      roomId: roomId
     };
-    setMessages([...messages, message]);
-  };
-
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setImagePreviews(prev => [...prev, { name: file.name, size: file.size, dataUrl: e.target.result }]);
-        };
-        reader.readAsDataURL(file);
-        return;
-      }
-      const message = {
-        id: Date.now(),
-        sender: 'You',
-        content: file.name,
-        timestamp: new Date(),
-        type: 'file',
-        fileName: file.name,
-        fileSize: file.size,
-        avatar: 'Y'
-      };
-      setMessages([...messages, message]);
+    
+    setMessages(prev => [...prev, message]);
+    
+    try {
+      await socketService.sendMessage(roomId, message);
+      console.log('✅ Code message sent successfully');
+    } catch (err) {
+      console.error('❌ Error sending code message:', err);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
     }
   };
 
+  // 🆕 SỬA: HANDLE FILE UPLOAD
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreviews(prev => [...prev, { 
+          name: file.name, 
+          size: file.size, 
+          dataUrl: e.target.result 
+        }]);
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const messageId = `file_${Date.now()}`;
+    const senderName = currentUser?.fullName || currentUser?.username || 'You';
+    
+    const message = {
+      id: messageId,
+      sender: senderName,
+      senderId: currentUser?.id || currentUser?.username,
+      content: file.name,
+      timestamp: new Date().toISOString(),
+      type: 'file',
+      fileName: file.name,
+      fileSize: file.size,
+      avatar: senderName.charAt(0).toUpperCase(),
+      roomId: roomId
+    };
+    
+    setMessages(prev => [...prev, message]);
+    
+    try {
+      await socketService.sendMessage(roomId, message);
+      console.log('✅ File message sent successfully');
+    } catch (err) {
+      console.error('❌ Error sending file message:', err);
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+    }
+  };
+
+  // Các hàm khác giữ nguyên
   const startVideoCall = () => {
     setIsVideoCall(true);
     setIsVoiceCall(false);
@@ -417,10 +411,27 @@ const ChatRoom = () => {
     }
   };
 
+  const getConnectionStatusColor = () => {
+    switch (connectionStatus) {
+      case 'connected': return 'text-green-500';
+      case 'connecting': return 'text-yellow-500';
+      case 'error': return 'text-red-500';
+      default: return 'text-gray-500';
+    }
+  };
+
+  const getConnectionStatusText = () => {
+    switch (connectionStatus) {
+      case 'connected': return '• Đã kết nối';
+      case 'connecting': return '• Đang kết nối...';
+      case 'error': return '• Lỗi kết nối';
+      default: return '• Ngắt kết nối';
+    }
+  };
+
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!currentUser) {
-      // Store roomId in sessionStorage to redirect after login
       if (roomId && roomId !== 'general') {
         sessionStorage.setItem('redirectAfterLogin', `/chat/${roomId}`);
       }
@@ -429,10 +440,9 @@ const ChatRoom = () => {
   }, [currentUser, navigate, roomId]);
 
   if (!currentUser) {
-    return null; // Prevent flash of content
+    return null;
   }
 
-  // Function to generate and copy room link
   const copyRoomLink = async () => {
     const roomLink = `${window.location.origin}/chat/${roomId}`;
     try {
@@ -440,7 +450,6 @@ const ChatRoom = () => {
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 2000);
     } catch (err) {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = roomLink;
       document.body.appendChild(textArea);
@@ -458,7 +467,6 @@ const ChatRoom = () => {
   };
 
   const generateRoomCode = () => {
-    // 6-8 char alphanumeric code
     const code = Math.random().toString(36).slice(2, 8);
     navigate(`/chat/${code}`);
   };
@@ -519,6 +527,7 @@ const ChatRoom = () => {
             </div>
           </div>
         </div>
+        
         {/* Sidebar search */}
         <div className="p-3 border-b">
           <input
@@ -546,6 +555,7 @@ const ChatRoom = () => {
             className="mt-2 w-full text-sm px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           >Tạo phòng ngẫu nhiên</button>
         </div>
+        
         <div className="p-3 border-b">
           <h2 className="text-xs font-semibold text-gray-500 mb-2">Kênh</h2>
           <div className="space-y-1 max-h-56 overflow-y-auto">
@@ -560,6 +570,7 @@ const ChatRoom = () => {
             ))}
           </div>
         </div>
+        
         <div className="p-3">
           <h3 className="text-xs font-semibold text-gray-500 mb-2">Tin nhắn trực tiếp</h3>
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -576,6 +587,7 @@ const ChatRoom = () => {
             ))}
           </div>
         </div>
+        
         <div className="p-4 border-t">
           <h3 className="text-sm font-semibold text-gray-500 mb-2">Thành viên</h3>
           <div className="space-y-2 max-h-56 overflow-y-auto pr-2">
@@ -600,7 +612,6 @@ const ChatRoom = () => {
                 alt="Room" 
                 className="w-10 h-10 object-contain" 
                 onError={(e) => {
-                  // Fallback if image not found
                   e.target.style.display = 'none';
                   e.target.nextSibling.style.display = 'flex';
                 }}
@@ -613,9 +624,10 @@ const ChatRoom = () => {
               <h2 className="font-semibold text-gray-800">Phòng: {roomId}</h2>
               <p className="text-sm text-gray-500">
                 {onlineUsers.length > 0 ? onlineUsers.length : 1} thành viên
-                {isConnected && <span className="ml-2 text-green-500">• Đã kết nối</span>}
+                <span className={`ml-2 ${getConnectionStatusColor()}`}>
+                  {getConnectionStatusText()}
+                </span>
               </p>
-              {/* Online members strip */}
               {onlineUsers.length > 0 && (
                 <div className="mt-2 flex items-center gap-2 overflow-x-auto pr-2">
                   {onlineUsers.map(u => (
@@ -678,7 +690,6 @@ const ChatRoom = () => {
 
         {/* Messages (virtualized) */}
         <div className="flex-1 overflow-y-auto bg-gray-50">
-          {/* Quick search inline */}
           {sidebarQuery && (
             <div className="px-4 py-2 text-xs text-gray-500 bg-white border-b">Kết quả cho: "{sidebarQuery}"</div>
           )}
@@ -692,15 +703,6 @@ const ChatRoom = () => {
                 <p className="text-lg font-medium">Chưa có tin nhắn nào</p>
                 <p className="text-sm mt-2">Hãy bắt đầu cuộc trò chuyện!</p>
               </div>
-            </div>
-          )}
-          
-          {/* Debug messages count */}
-          {process.env.NODE_ENV === 'development' && (
-            <div className="fixed top-2 right-2 bg-black/70 text-white text-xs p-2 rounded z-50">
-              Messages: {messages.length} | Filtered: {messages.filter(m =>
-                !sidebarQuery || String(m.content).toLowerCase().includes(sidebarQuery.toLowerCase())
-              ).length} | Query: "{sidebarQuery}"
             </div>
           )}
           
@@ -727,95 +729,93 @@ const ChatRoom = () => {
                           {!isOwn && <span className="font-medium text-gray-700">{message.sender}</span>}
                           <span>{formatTime(message.timestamp)}</span>
                         </div>
-                      {message.type === 'text' && (
-                        <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
-                          {message.replyTo && (
-                            <div className="text-xs opacity-80 mb-1 border-l-2 pl-2">
-                              Trả lời {message.replyTo.sender}: {message.replyTo.preview}
-                            </div>
-                          )}
-                          {editingMessageId === message.id ? (
-                            <input
-                              className={`w-full bg-transparent outline-none ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
-                              value={editingContent}
-                              onChange={(e)=>setEditingContent(e.target.value)}
-                              onKeyDown={(e)=>{
-                                if(e.key==='Enter'){
-                                  setMessages(prev => prev.map(m => m.id===message.id ? { ...m, content: editingContent } : m));
-                                  setEditingMessageId(null);
-                                } else if (e.key==='Escape') {
-                                  setEditingMessageId(null);
-                                }
-                              }}
-                              autoFocus
-                            />
-                          ) : (
-                            <span>{message.content}</span>
-                          )}
-                          {/* Reactions */}
-                          {message.reactions && Object.keys(message.reactions).length>0 && (
-                            <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs`}>
-                              {Object.entries(message.reactions).map(([emo, count]) => (
-                                <span key={emo} className="px-2 py-0.5 rounded-full bg-black/10">
-                                  {emo} {count}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {message.type === 'code' && (
-                        <div className="bg-gray-100 rounded-lg p-3 mt-2 text-left">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-xs font-medium text-gray-600">{message.language || 'code'}</span>
-                              {message.fileName && (<span className="text-xs text-gray-500">({message.fileName})</span>)}
-                            </div>
-                            <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button className="text-xs text-blue-600 hover:text-blue-800 p-1">
-                                <Download className="h-3 w-3" />
-                              </button>
-                            </div>
+                        {message.type === 'text' && (
+                          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+                            {message.replyTo && (
+                              <div className="text-xs opacity-80 mb-1 border-l-2 pl-2">
+                                Trả lời {message.replyTo.sender}: {message.replyTo.preview}
+                              </div>
+                            )}
+                            {editingMessageId === message.id ? (
+                              <input
+                                className={`w-full bg-transparent outline-none ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
+                                value={editingContent}
+                                onChange={(e)=>setEditingContent(e.target.value)}
+                                onKeyDown={(e)=>{
+                                  if(e.key==='Enter'){
+                                    setMessages(prev => prev.map(m => m.id===message.id ? { ...m, content: editingContent } : m));
+                                    setEditingMessageId(null);
+                                  } else if (e.key==='Escape') {
+                                    setEditingMessageId(null);
+                                  }
+                                }}
+                                autoFocus
+                              />
+                            ) : (
+                              <span>{message.content}</span>
+                            )}
+                            {message.reactions && Object.keys(message.reactions).length>0 && (
+                              <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs`}>
+                                {Object.entries(message.reactions).map(([emo, count]) => (
+                                  <span key={emo} className="px-2 py-0.5 rounded-full bg-black/10">
+                                    {emo} {count}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 p-2 rounded border">{message.content}</pre>
-                        </div>
-                      )}
-                      {message.type === 'file' && (
-                        <div className="bg-gray-100 rounded-lg p-3 mt-2 flex items-center space-x-3">
-                          <FileText className="h-8 w-8 text-blue-500" />
-                          <div className="flex-1">
-                            <p className="font-medium text-sm">{message.fileName}</p>
-                            <p className="text-xs text-gray-500">{message.fileSize} bytes</p>
-                          </div>
-                          <button className="text-blue-600 hover:text-blue-800">
-                            <Download className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
-                      {/* Hover actions */}
-                      <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
-                        <button onClick={()=>setReplyTo(message)} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Trả lời</button>
-                        <button onClick={()=>{
-                          const emo='👍';
-                          setMessages(prev => prev.map(m => m.id===message.id ? { ...m, reactions: { ...m.reactions, [emo]: (m.reactions?.[emo]||0)+1 } } : m));
-                        }} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Cảm xúc</button>
-                        {isOwn && (
-                          <>
-                            <button onClick={()=>{ setEditingMessageId(message.id); setEditingContent(message.content); }} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Sửa</button>
-                            <button onClick={()=> setMessages(prev => prev.filter(m => m.id!==message.id))} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-red-600">Xóa</button>
-                          </>
                         )}
+                        {message.type === 'code' && (
+                          <div className="bg-gray-100 rounded-lg p-3 mt-2 text-left">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-xs font-medium text-gray-600">{message.language || 'code'}</span>
+                                {message.fileName && (<span className="text-xs text-gray-500">({message.fileName})</span>)}
+                              </div>
+                              <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button className="text-xs text-blue-600 hover:text-blue-800 p-1">
+                                  <Download className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                            <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 p-2 rounded border">{message.content}</pre>
+                          </div>
+                        )}
+                        {message.type === 'file' && (
+                          <div className="bg-gray-100 rounded-lg p-3 mt-2 flex items-center space-x-3">
+                            <FileText className="h-8 w-8 text-blue-500" />
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">{message.fileName}</p>
+                              <p className="text-xs text-gray-500">{message.fileSize} bytes</p>
+                            </div>
+                            <button className="text-blue-600 hover:text-blue-800">
+                              <Download className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                        <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
+                          <button onClick={()=>setReplyTo(message)} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Trả lời</button>
+                          <button onClick={()=>{
+                            const emo='👍';
+                            setMessages(prev => prev.map(m => m.id===message.id ? { ...m, reactions: { ...m.reactions, [emo]: (m.reactions?.[emo]||0)+1 } } : m));
+                          }} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Cảm xúc</button>
+                          {isOwn && (
+                            <>
+                              <button onClick={()=>{ setEditingMessageId(message.id); setEditingContent(message.content); }} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Sửa</button>
+                              <button onClick={()=> setMessages(prev => prev.filter(m => m.id!==message.id))} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-red-600">Xóa</button>
+                            </>
+                          )}
+                        </div>
                       </div>
+                      {isOwn && (
+                        <div className="ml-2 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">{message.avatar}</div>
+                      )}
                     </div>
-                    {isOwn && (
-                      <div className="ml-2 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">{message.avatar}</div>
-                    )}
                   </div>
-                </div>
-              );
-            }}
-            followOutput={true}
-          />
+                );
+              }}
+              followOutput={true}
+            />
           )}
         </div>
 
@@ -839,7 +839,13 @@ const ChatRoom = () => {
         )}
 
         {/* Code Editor */}
-        <CodeEditor isOpen={showCodeEditor} onClose={() => setShowCodeEditor(false)} onSendCode={codeData => setMessages(prev => [...prev, { id: Date.now(), sender: currentUser?.fullName || currentUser?.username || 'You', content: codeData.content, timestamp: new Date(), type: 'code', language: codeData.language, fileName: codeData.fileName, avatar: (currentUser?.fullName || currentUser?.username || 'Y').charAt(0).toUpperCase() }])} initialCode={codeContent} initialLanguage={codeLanguage} />
+        <CodeEditor 
+          isOpen={showCodeEditor} 
+          onClose={() => setShowCodeEditor(false)} 
+          onSendCode={sendCode} // 🆕 SỬ DỤNG ASYNC SENDCODE
+          initialCode={codeContent} 
+          initialLanguage={codeLanguage} 
+        />
 
         {/* Message Input */}
         <div className="bg-white border-t border-gray-200 p-4">
@@ -864,10 +870,10 @@ const ChatRoom = () => {
                   }
                   window.__typingTimer = window.setTimeout(()=>setIsTyping(false), 1200);
                 }} 
-                onKeyDown={(e) => {
+                onKeyDown={async (e) => { // 🆕 THÊM ASYNC
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    sendMessage();
+                    await sendMessage(); // 🆕 AWAIT SENDMESSAGE
                   }
                 }} 
                 placeholder="Nhập tin nhắn..." 
@@ -891,12 +897,22 @@ const ChatRoom = () => {
           {isTyping && (
             <div className="mt-2 text-xs text-gray-500">Đang nhập...</div>
           )}
-          <input ref={fileInputRef} type="file" onChange={(e)=>{ const file=e.target.files?.[0]; if(file){ handleFileUpload({ target: { files: [file] } }); } }} className="hidden" accept="image/*,.txt,.js,.py,.java,.cpp,.html,.css,.json,.md" />
+          <input 
+            ref={fileInputRef} 
+            type="file" 
+            onChange={handleFileUpload} // 🆕 SỬ DỤNG ASYNC HANDLEFILEUPLOAD
+            className="hidden" 
+            accept="image/*,.txt,.js,.py,.java,.cpp,.html,.css,.json,.md" 
+          />
         </div>
       </div>
 
       {/* AI Assistant */}
-      <AIAssistant isOpen={showAIAssistant} onClose={() => setShowAIAssistant(false)} onMinimize={() => setIsAIMinimized(!isAIMinimized)} />
+      <AIAssistant 
+        isOpen={showAIAssistant} 
+        onClose={() => setShowAIAssistant(false)} 
+        onMinimize={() => setIsAIMinimized(!isAIMinimized)} 
+      />
 
       {/* Video Call */}
       <EnhancedVideoCall 
@@ -964,7 +980,6 @@ const ChatRoom = () => {
               <button
                 onClick={() => {
                   copyRoomLink();
-                  // Try to use Web Share API if available
                   if (navigator.share) {
                     navigator.share({
                       title: `Tham gia phòng chat: ${roomId}`,

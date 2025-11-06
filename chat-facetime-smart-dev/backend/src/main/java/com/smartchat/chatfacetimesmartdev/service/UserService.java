@@ -1,4 +1,4 @@
-package service;
+package com.smartchat.chatfacetimesmartdev.service;
 
 import com.smartchat.chatfacetimesmartdev.entity.User;
 import com.smartchat.chatfacetimesmartdev.repository.UserRepository;

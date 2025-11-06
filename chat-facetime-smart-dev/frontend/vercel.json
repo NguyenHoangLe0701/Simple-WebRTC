@@ -1,5 +1,8 @@
 {
-    "rewrites": [
-      { "source": "/(.*)", "destination": "/" }
-    ]
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "env": {
+    "VITE_API_URL": "https://simple-webrtc-4drq.onrender.com"
   }
+}

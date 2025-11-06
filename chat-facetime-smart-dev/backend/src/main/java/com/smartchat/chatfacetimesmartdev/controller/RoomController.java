@@ -1,15 +1,24 @@
-package controller;
+package com.smartchat.chatfacetimesmartdev.controller;
+
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import service.RoomService;
-import dto.RoomDto;
-import dto.RoomCreateDto;
-import dto.RoomJoinDto;
-import dto.RoomApprovalDto;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import com.smartchat.chatfacetimesmartdev.dto.RoomApprovalDto;
+import com.smartchat.chatfacetimesmartdev.dto.RoomCreateDto;
+import com.smartchat.chatfacetimesmartdev.dto.RoomDto;
+import com.smartchat.chatfacetimesmartdev.dto.RoomJoinDto;
+import com.smartchat.chatfacetimesmartdev.service.RoomService;
 
 @RestController
 @RequestMapping("/api/rooms")
@@ -79,23 +88,22 @@ public class RoomController {
     @PostMapping("/{roomId}/approve")
     public ResponseEntity<Void> approveUser(@PathVariable String roomId, @RequestBody RoomApprovalDto approvalDto) {
         try {
-            roomService.approveUser(roomId, approvalDto.getUserId());
+            roomService.approveUser(roomId, String.valueOf(approvalDto.getUserId()));
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }
     }
-
+    
     @PostMapping("/{roomId}/reject")
     public ResponseEntity<Void> rejectUser(@PathVariable String roomId, @RequestBody RoomApprovalDto approvalDto) {
         try {
-            roomService.rejectUser(roomId, approvalDto.getUserId());
+            roomService.rejectUser(roomId, String.valueOf(approvalDto.getUserId()));
             return ResponseEntity.ok().build();
         } catch (Exception e) {
             return ResponseEntity.badRequest().build();
         }
     }
-
     @PostMapping("/{roomId}/leave")
     public ResponseEntity<Void> leaveRoom(@PathVariable String roomId, @RequestBody RoomJoinDto leaveDto) {
         try {

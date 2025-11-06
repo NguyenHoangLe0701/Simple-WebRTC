@@ -1,4 +1,4 @@
-package entity;
+package com.smartchat.chatfacetimesmartdev.entity;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

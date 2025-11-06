@@ -11,42 +11,25 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-  @Value("${stomp.relay.enabled:false}")
-  private boolean relayEnabled;
+    @Value("${app.frontend.url:http://localhost:5173}")
+    private String frontendUrl;
 
-  @Value("${stomp.relay.host:}")
-  private String relayHost;
-
-  @Value("${stomp.relay.port:61613}")
-  private Integer relayPort;
-
-  @Value("${stomp.relay.login:}")
-  private String relayLogin;
-
-  @Value("${stomp.relay.passcode:}")
-  private String relayPasscode;
-
-  @Override
-  public void configureMessageBroker(MessageBrokerRegistry config) {
-    if (relayEnabled && relayHost != null && !relayHost.isBlank()) {
-      // Use external broker relay (RabbitMQ/ActiveMQ over STOMP)
-      config.enableStompBrokerRelay("/topic", "/queue", "/room")
-            .setRelayHost(relayHost)
-            .setRelayPort(relayPort != null ? relayPort : 61613)
-            .setClientLogin(relayLogin)
-            .setClientPasscode(relayPasscode)
-            .setSystemLogin(relayLogin)
-            .setSystemPasscode(relayPasscode);
-    } else {
-      // Fallback to in-memory simple broker
-      config.enableSimpleBroker("/topic","/room","/queue");
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns(
+                    "http://localhost:5173",
+                    "http://localhost:3000", 
+                    "https://simple-web-rtc-two.vercel.app",
+                    "https://*.vercel.app"
+                )
+                .withSockJS(); // Quan trọng: cho phép SockJS fallback
     }
-    config.setApplicationDestinationPrefixes("/app");
-    config.setUserDestinationPrefix("/user");
-  }
 
-  @Override
-  public void registerStompEndpoints(StompEndpointRegistry registry) {
-    registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
-  }
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic", "/queue");
+        config.setApplicationDestinationPrefixes("/app");
+        config.setUserDestinationPrefix("/user");
+    }
 }
