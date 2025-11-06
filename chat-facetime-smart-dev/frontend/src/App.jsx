@@ -12,7 +12,7 @@ import Pricing from "./pages/Pricing";
 import ForgotPassword from "./pages/ForgotPassword";
 import DocsPage from "./pages/DocsPage";
 import AdminDashboard from "./pages/AdminDashboard";
-import ChatRoom from "./pages/ChatRoom";
+import ChatRoom from "./pages/ChatRoom/ChatRoom";
 
 function App() {
   const location = useLocation(); // Lấy thông tin route hiện tại

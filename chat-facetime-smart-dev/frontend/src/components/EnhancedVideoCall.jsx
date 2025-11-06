@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import socketService from '../services/socket';
+import socketService from '../services/socketService';
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Monitor, Share2, Users } from 'lucide-react';
 
 const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {

@@ -45,9 +45,12 @@ function Login() {
             fullName: response.data.fullName,
             role: response.data.role
           }));
+          sessionStorage.setItem('userId', response.data.id);
+          
         }
         // Keep localStorage for backward compatibility if some code still reads it
         localStorage.setItem('token', response.data.token);
+        localStorage.setItem('userId', response.data.user.id);
         localStorage.setItem('user', JSON.stringify({
           id: response.data.id,
           username: response.data.username,

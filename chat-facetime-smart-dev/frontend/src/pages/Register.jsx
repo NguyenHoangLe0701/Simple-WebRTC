@@ -99,6 +99,7 @@ function Register() {
           role: data.role
         }));
         
+        localStorage.setItem('userId',data.id)
         setSuccess("Đăng ký thành công! Đang chuyển hướng...");
         setTimeout(() => navigate('/'), 2000);
       } else {
