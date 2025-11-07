@@ -36,7 +36,7 @@ const AIAssistant = ({ isOpen, onClose, onMinimize }) => {
     try {
       // Gọi API backend thật sự
       // Endpoint là '/api/ai/chat' như chúng ta đã định nghĩa ở backend
-      const response = await api.post('/ai/chat', {
+      const response = await api.post('/api/ai/chat', {
         prompt: input
       });
 
