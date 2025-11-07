@@ -1,6 +1,5 @@
 package com.smartchat.chatfacetimesmartdev.service;
 
-import com.smartchat.chatfacetimesmartdev.dto.GeminiDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -9,10 +8,12 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import com.smartchat.chatfacetimesmartdev.dto.GeminiDto;
+
 @Service
 public class AIService {
 
-    @Value("${gemini.api.key}")
+    @Value("${gemini.api.key:}") // 🆕 THÊM DEFAULT VALUE
     private String geminiApiKey;
 
     @Autowired
@@ -51,6 +52,11 @@ public class AIService {
                     "Câu hỏi của người dùng: ";
 
     public String getAIResponse(String userInput) {
+        // 🆕 KIỂM TRA API KEY
+        if (geminiApiKey == null || geminiApiKey.isEmpty()) {
+            return "Xin lỗi, dịch vụ AI hiện không khả dụng. Vui lòng thử lại sau.";
+        }
+
         String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey;
 
         // 1. Xây dựng prompt cuối cùng
@@ -71,8 +77,13 @@ public class AIService {
             GeminiDto.GeminiResponse response = restTemplate.postForObject(geminiUrl, entity, GeminiDto.GeminiResponse.class);
 
             // 6. Xử lý và trả về kết quả
-            if (response != null && response.candidates != null && !response.candidates.isEmpty()) {
-                // Lấy câu trả lời text từ phần đầu tiên
+            if (response != null && 
+                response.candidates != null && 
+                !response.candidates.isEmpty() &&
+                response.candidates.get(0).content != null &&
+                response.candidates.get(0).content.parts != null &&
+                !response.candidates.get(0).content.parts.isEmpty()) {
+                
                 return response.candidates.get(0).content.parts.get(0).text;
             } else {
                 return "Xin lỗi, tôi không thể xử lý yêu cầu của bạn lúc này.";

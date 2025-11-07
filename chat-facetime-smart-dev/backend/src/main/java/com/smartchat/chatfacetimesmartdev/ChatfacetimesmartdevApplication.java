@@ -2,9 +2,8 @@ package com.smartchat.chatfacetimesmartdev;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean; // Thêm import
-import org.springframework.web.client.RestTemplate; // Thêm import
-import io.github.cdimascio.dotenv.Dotenv;
+import org.springframework.context.annotation.Bean;
+import org.springframework.web.client.RestTemplate;
 
 @SpringBootApplication(scanBasePackages = {"com.smartchat.chatfacetimesmartdev"})
 public class ChatfacetimesmartdevApplication {
@@ -15,11 +14,7 @@ public class ChatfacetimesmartdevApplication {
 	}
 
 	public static void main(String[] args) {
-		Dotenv dotenv = Dotenv.configure()
-				.systemProperties() // Quan trọng: nạp vào System Properties
-				.load();
 		SpringApplication.run(ChatfacetimesmartdevApplication.class, args);
-		System.out.println("🚀 Application started - All packages will be scanned");
+		System.out.println("🚀 Application started successfully");
 	}
-
 }
