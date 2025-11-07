@@ -1,6 +1,8 @@
 package com.smartchat.chatfacetimesmartdev.controller;
 
 import java.util.Map;
+import java.util.HashMap;
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -37,41 +39,43 @@ public class WebRTCSignalController {
                 return;
             }
             
-            // 🆕 XỬ LÝ JOIN SIGNAL - Thêm user vào presence
-            if ("join".equals(signalType)) {
-                handleJoinSignal(roomId, signal);
+            // 🆕 FIX: Sử dụng switch expression
+            switch (signalType) {
+                case "join" -> handleJoinSignal(roomId, signal);
+                case "leave" -> handleLeaveSignal(roomId, signal);
+                case "offer", "answer", "ice-candidate" -> 
+                    System.out.println("🔊 Broadcasting WebRTC signal: " + signalType);
+                default -> System.err.println("⚠️ Unhandled signal type: " + signalType);
             }
-            // 🆕 XỬ LÝ LEAVE SIGNAL - Xóa user khỏi presence
-            else if ("leave".equals(signalType)) {
-                handleLeaveSignal(roomId, signal);
-            }
+            
+            // 🆕 FIX: Tạo signal mới để tránh modify original
+            Map<String, Object> broadcastSignal = new HashMap<>(signal);
             
             // Add server metadata
-            signal.put("serverProcessed", true);
-            signal.put("serverTimestamp", System.currentTimeMillis());
+            broadcastSignal.put("serverProcessed", true);
+            broadcastSignal.put("serverTimestamp", System.currentTimeMillis());
+            broadcastSignal.put("fromUserId", fromUserId);
             
             // Broadcast to room
-            messagingTemplate.convertAndSend("/topic/signal/" + roomId, signal);
-            System.out.println("✅ Signal broadcasted to " + roomId);
+            messagingTemplate.convertAndSend("/topic/signal/" + roomId, broadcastSignal);
+            System.out.println("✅ Signal broadcasted to " + roomId + ", type: " + signalType);
             
         } catch (Exception e) {
             System.err.println("❌ Signal handling error: " + e.getMessage());
-            e.printStackTrace();
         }
     }
     
-    // 🆕 Xử lý join signal
+    // 🆕 FIX: Xử lý join signal chi tiết hơn
     private void handleJoinSignal(String roomId, Map<String, Object> signal) {
         try {
             Object userObj = signal.get("user");
-            if (userObj instanceof Map) {
-                Map<?, ?> userMap = (Map<?, ?>) userObj;
+            if (userObj instanceof Map<?, ?> userMap) {
                 
                 String userId = getStringFromMap(userMap, "id");
                 String username = getStringFromMap(userMap, "username");
                 String fullName = getStringFromMap(userMap, "fullName");
                 
-                if (userId != null) {
+                if (userId != null && !userId.equals("unknown")) {
                     UserPresence userPresence = new UserPresence(
                         userId, 
                         username != null ? username : userId,
@@ -81,89 +85,147 @@ public class WebRTCSignalController {
                     );
                     
                     presenceService.addOrUpdate(roomId, userPresence);
-                    System.out.println("✅ Added user to WebRTC presence: " + userId);
+                    System.out.println("✅ Added user to WebRTC presence: " + userId + " in room: " + roomId);
                     
-                    // 🆕 Broadcast presence update
-                    broadcastPresenceUpdate(roomId);
+                    // 🆕 FIX: Broadcast presence update với danh sách users
+                    broadcastFullPresenceUpdate(roomId);
+                } else {
+                    System.err.println("⚠️ Invalid user ID in join signal");
                 }
+            } else {
+                System.err.println("⚠️ User object missing or invalid in join signal");
             }
         } catch (Exception e) {
             System.err.println("❌ Error handling join signal: " + e.getMessage());
         }
     }
     
-    // 🆕 Xử lý leave signal
+    // 🆕 FIX: Xử lý leave signal chi tiết hơn
     private void handleLeaveSignal(String roomId, Map<String, Object> signal) {
         try {
             String userId = extractUserId(signal);
             
-            if (userId != null && !"unknown".equals(userId)) {
+            if (userId != null && !userId.equals("unknown")) {
                 presenceService.remove(roomId, userId);
-                System.out.println("✅ Removed user from WebRTC presence: " + userId);
+                System.out.println("✅ Removed user from WebRTC presence: " + userId + " from room: " + roomId);
                 
-                // 🆕 Broadcast presence update
-                broadcastPresenceUpdate(roomId);
+                // 🆕 FIX: Broadcast presence update với danh sách users
+                broadcastFullPresenceUpdate(roomId);
+            } else {
+                System.err.println("⚠️ Invalid user ID in leave signal");
             }
         } catch (Exception e) {
             System.err.println("❌ Error handling leave signal: " + e.getMessage());
         }
     }
     
-    // 🆕 Broadcast presence update
-    private void broadcastPresenceUpdate(String roomId) {
+    // 🆕 FIX: Broadcast presence update với full user list - SỬ DỤNG METHOD list() CÓ SẴN
+    private void broadcastFullPresenceUpdate(String roomId) {
         try {
-            // Gửi presence update đến tất cả clients trong phòng
-            Map<String, Object> presenceUpdate = Map.of(
-                "type", "webrtc_presence_update",
-                "roomId", roomId,
-                "timestamp", System.currentTimeMillis(),
-                "message", "Presence updated via WebRTC signaling"
-            );
+            // 🆕 FIX: Sử dụng method list() có sẵn trong RoomPresenceService
+            List<UserPresence> userList = presenceService.list(roomId);
+            
+            Map<String, Object> presenceUpdate = new HashMap<>();
+            presenceUpdate.put("type", "webrtc_presence_update");
+            presenceUpdate.put("roomId", roomId);
+            presenceUpdate.put("timestamp", System.currentTimeMillis());
+            presenceUpdate.put("users", userList);
+            presenceUpdate.put("count", userList.size());
+            presenceUpdate.put("message", "Presence updated via WebRTC signaling");
             
             messagingTemplate.convertAndSend("/topic/presence/" + roomId, presenceUpdate);
-            System.out.println("📊 WebRTC presence update broadcasted for room: " + roomId);
+            System.out.println("📊 WebRTC presence update broadcasted for room: " + roomId + " with " + userList.size() + " users");
             
         } catch (Exception e) {
             System.err.println("❌ Error broadcasting presence update: " + e.getMessage());
+            // Fallback: gửi basic presence update
+            broadcastBasicPresenceUpdate(roomId);
         }
     }
     
+    // 🆕 FIX: Basic presence update
+    private void broadcastBasicPresenceUpdate(String roomId) {
+        try {
+            Map<String, Object> presenceUpdate = new HashMap<>();
+            presenceUpdate.put("type", "webrtc_presence_update");
+            presenceUpdate.put("roomId", roomId);
+            presenceUpdate.put("timestamp", System.currentTimeMillis());
+            presenceUpdate.put("message", "Presence updated via WebRTC signaling");
+            
+            messagingTemplate.convertAndSend("/topic/presence/" + roomId, presenceUpdate);
+            System.out.println("📊 Basic presence update broadcasted for room: " + roomId);
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error broadcasting basic presence update: " + e.getMessage());
+        }
+    }
+    
+    // 🆕 FIX: Kiểm tra signal type với nhiều loại hơn
     private boolean isValidSignalType(String type) {
         return type != null && (
             type.equals("offer") || 
             type.equals("answer") || 
             type.equals("ice-candidate") || 
             type.equals("join") || 
-            type.equals("leave")
+            type.equals("leave") ||
+            type.equals("candidate") || // 🆕 Thêm alias cho ice-candidate
+            type.equals("ready") ||     // 🆕 Thêm signal ready
+            type.equals("hangup")       // 🆕 Thêm signal kết thúc call
         );
     }
     
+    // 🆕 FIX: Extract user ID với nhiều fallback hơn
     private String extractUserId(Map<String, Object> signal) {
         try {
+            // Thử lấy từ user object trước - SỬA: sử dụng pattern matching
             Object userObj = signal.get("user");
-            if (userObj instanceof Map) {
-                Map<?, ?> userMap = (Map<?, ?>) userObj;
+            if (userObj instanceof Map<?, ?> userMap) {
                 Object userId = userMap.get("id");
-                return userId != null ? userId.toString() : "unknown";
+                if (userId != null) return userId.toString();
+                
+                // Fallback: thử lấy username nếu không có id
+                Object username = userMap.get("username");
+                if (username != null) return username.toString();
             }
+            
+            // Fallback: thử lấy trực tiếp từ signal
+            Object directUserId = signal.get("userId");
+            if (directUserId != null) return directUserId.toString();
+            
+            Object fromUser = signal.get("from");
+            if (fromUser != null) return fromUser.toString();
+            
             return "unknown";
+            
         } catch (Exception e) {
+            System.err.println("⚠️ Error extracting user ID: " + e.getMessage());
             return "unknown";
         }
     }
     
+    // 🆕 FIX: Get string safe với type checking tốt hơn
     private String getStringSafe(Map<String, Object> map, String key) {
         if (map == null || key == null) return null;
-        Object value = map.get(key);
-        if (value instanceof String) return (String) value;
-        if (value != null) return value.toString();
-        return null;
+        try {
+            Object value = map.get(key);
+            if (value instanceof String) return (String) value;
+            if (value != null) return value.toString();
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
     
-    // 🆕 Helper method để lấy string từ Map<?, ?>
+    // 🆕 FIX: Helper method để lấy string từ Map<?, ?>
     private String getStringFromMap(Map<?, ?> map, String key) {
         if (map == null || key == null) return null;
-        Object value = map.get(key);
-        return value != null ? value.toString() : null;
+        try {
+            Object value = map.get(key);
+            if (value instanceof String str) return str;
+            if (value != null) return value.toString();
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }
