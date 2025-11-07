@@ -156,7 +156,8 @@ public class SecurityConfig {
                     "/vite.svg",
                     "/error",
                         "/api/ai/**",
-                    "/actuator/health"  //THÊM health check endpoint
+                    "/actuator/health",  //THÊM health check endpoint
+                    "/health"
                 ).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/rooms/**").permitAll()
