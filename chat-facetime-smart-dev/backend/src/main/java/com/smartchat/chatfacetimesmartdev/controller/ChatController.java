@@ -1,7 +1,6 @@
 package com.smartchat.chatfacetimesmartdev.controller;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
@@ -15,7 +14,6 @@ import org.springframework.stereotype.Controller;
 import com.smartchat.chatfacetimesmartdev.model.ChatMessage;
 
 @Controller
-@SuppressWarnings("unchecked")
 public class ChatController {
 
     @Autowired
@@ -73,77 +71,6 @@ public class ChatController {
             System.err.println("❌ Chat Error: " + e.getMessage());
             e.printStackTrace();
         }
-    }
-
-    // === WEBRTC SIGNALING - ĐÃ SỬA ===
-    @MessageMapping("/signal/{roomId}")
-public void handleSignal(@DestinationVariable String roomId, @Payload Map<String, Object> signal) {
-    try {
-        System.out.println("🎯 WEBRTC SIGNAL RECEIVED - Room: " + roomId);
-        System.out.println("📨 Signal type: " + signal.get("type"));
-        
-        // 🆕 FIX USER PARSING
-        Object userObj = signal.get("user");
-        String fromUser = "unknown";
-        
-        if (userObj instanceof Map) {
-            Map<?, ?> userMap = (Map<?, ?>) userObj;
-            Object userId = userMap.get("id");
-            if (userId != null) {
-                fromUser = userId.toString();
-            }
-        }
-        
-        System.out.println("👤 From user ID: " + fromUser);
-        System.out.println("🎯 Target user: " + signal.get("targetUserId"));
-        System.out.println("📊 Full signal: " + signal);
-        
-        String signalType = getStringSafe(signal, "type");
-        
-        // 🆕 ĐẢM BẢO USER OBJECT ĐƯỢC GIỮ NGUYÊN
-        Map<String, Object> enhancedSignal = new HashMap<>(signal);
-        enhancedSignal.put("serverTimestamp", System.currentTimeMillis());
-        
-        System.out.println("✅ Forwarding signal to /topic/signal/" + roomId);
-        messagingTemplate.convertAndSend("/topic/signal/" + roomId, enhancedSignal);
-        System.out.println("✅ Signal broadcasted successfully");
-        
-    } catch (Exception e) {
-        System.err.println("❌ Signal Error: " + e.getMessage());
-        e.printStackTrace();
-    }
-}
-    @MessageMapping("/test/{roomId}")
-    public void testEndpoint(@DestinationVariable String roomId, @Payload String testMessage) {
-        System.out.println("=== 🧪 TEST ENDPOINT CALLED ===");
-        System.out.println("Room: " + roomId);
-        System.out.println("Message: " + testMessage);
-        System.out.println("=== TEST END ===");
-        
-        Map<String, Object> response = Map.of(
-            "type", "test-response",
-            "message", "Backend received: " + testMessage,
-            "roomId", roomId,
-            "timestamp", LocalDateTime.now().toString()
-        );
-        
-        messagingTemplate.convertAndSend("/topic/chat/" + roomId, response);
-    }
-    
-    // === DEBUG ENDPOINT ===
-    @MessageMapping("/debug/{roomId}")
-    public void debugConnection(@DestinationVariable String roomId, @Payload String debugMessage) {
-        System.out.println("🐛 Debug - Room: " + roomId + " - " + debugMessage);
-        
-        Map<String, Object> debugResponse = Map.of(
-            "type", "debug",
-            "message", "Backend received: " + debugMessage,
-            "roomId", roomId,
-            "timestamp", LocalDateTime.now().toString()
-        );
-        
-        messagingTemplate.convertAndSend("/topic/debug/" + roomId, debugResponse);
-        System.out.println("✅ Debug response sent");
     }
 
     // === HELPER METHOD ===
