@@ -33,7 +33,8 @@ public class CustomUserDetailsService implements UserDetailsService {
         
         User user = userOpt.get();
         
-        if (!user.getActive()) {
+        // SỬA Ở ĐÂY: Không cần getActive() vì User đã implement isEnabled()
+        if (!user.isEnabled()) {
             throw new UsernameNotFoundException("User account is disabled: " + usernameOrEmail);
         }
         

@@ -15,13 +15,18 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", uniqueConstraints = {
+    @UniqueConstraint(columnNames = "username"),
+    @UniqueConstraint(columnNames = "email")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -31,24 +36,24 @@ public class User implements UserDetails {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
-    @Column(unique = true, nullable = false)
+    @Column(unique = true, nullable = false, length = 100)
     private String username;
     
-    @Column(unique = true, nullable = false)
+    @Column(unique = true, nullable = false, length = 255)
     private String email;
     
-    @Column(nullable = false)
+    @Column(nullable = false, length = 255)
     private String password;
     
-    @Column(name = "full_name")
+    @Column(name = "full_name", length = 200)
     private String fullName;
     
     @Enumerated(EnumType.STRING)
-    @Column(name = "role")
+    @Column(name = "role", length = 20)
     private Role role = Role.USER;
     
     @Column(name = "is_active")
-    private Boolean active = true;
+    private boolean active = true;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -58,6 +63,11 @@ public class User implements UserDetails {
     
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
+    
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
     
     // UserDetails implementation
     @Override
@@ -87,5 +97,10 @@ public class User implements UserDetails {
     
     public enum Role {
         ADMIN, USER
+    }
+    
+    // Helper method để update last login
+    public void updateLastLogin() {
+        this.lastLogin = LocalDateTime.now();
     }
 }

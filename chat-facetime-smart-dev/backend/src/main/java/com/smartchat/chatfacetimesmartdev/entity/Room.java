@@ -1,8 +1,8 @@
 package com.smartchat.chatfacetimesmartdev.entity;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -13,6 +13,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 
 @Entity
 @Table(name = "rooms")
@@ -49,19 +50,31 @@ public class Room {
     private int maxParticipants = 50;
 
     @ElementCollection
-    @CollectionTable(name = "room_participants", joinColumns = @JoinColumn(name = "room_id"))
+    @CollectionTable(
+        name = "room_participants", 
+        joinColumns = @JoinColumn(name = "room_id"),
+        uniqueConstraints = @UniqueConstraint(columnNames = {"room_id", "user_id"})
+    )
     @Column(name = "user_id")
-    private List<String> participants = new ArrayList<>();
+    private Set<String> participants = new HashSet<>();
 
     @ElementCollection
-    @CollectionTable(name = "room_approved_users", joinColumns = @JoinColumn(name = "room_id"))
+    @CollectionTable(
+        name = "room_approved_users", 
+        joinColumns = @JoinColumn(name = "room_id"),
+        uniqueConstraints = @UniqueConstraint(columnNames = {"room_id", "user_id"})
+    )
     @Column(name = "user_id")
-    private List<String> approvedUsers = new ArrayList<>();
+    private Set<String> approvedUsers = new HashSet<>();
 
     @ElementCollection
-    @CollectionTable(name = "room_waiting_users", joinColumns = @JoinColumn(name = "room_id"))
+    @CollectionTable(
+        name = "room_waiting_users", 
+        joinColumns = @JoinColumn(name = "room_id"),
+        uniqueConstraints = @UniqueConstraint(columnNames = {"room_id", "user_id"})
+    )
     @Column(name = "user_id")
-    private List<String> waitingUsers = new ArrayList<>();
+    private Set<String> waitingUsers = new HashSet<>();
 
     @Column(nullable = false)
     private boolean allowScreenShare = true;
@@ -171,27 +184,27 @@ public class Room {
         this.maxParticipants = maxParticipants;
     }
 
-    public List<String> getParticipants() {
+    public Set<String> getParticipants() {
         return participants;
     }
 
-    public void setParticipants(List<String> participants) {
+    public void setParticipants(Set<String> participants) {
         this.participants = participants;
     }
 
-    public List<String> getApprovedUsers() {
+    public Set<String> getApprovedUsers() {
         return approvedUsers;
     }
 
-    public void setApprovedUsers(List<String> approvedUsers) {
+    public void setApprovedUsers(Set<String> approvedUsers) {
         this.approvedUsers = approvedUsers;
     }
 
-    public List<String> getWaitingUsers() {
+    public Set<String> getWaitingUsers() {
         return waitingUsers;
     }
 
-    public void setWaitingUsers(List<String> waitingUsers) {
+    public void setWaitingUsers(Set<String> waitingUsers) {
         this.waitingUsers = waitingUsers;
     }
 
@@ -227,11 +240,9 @@ public class Room {
         this.updatedAt = updatedAt;
     }
 
-    // Helper methods
+    // Helper methods - UPDATED FOR SET
     public void addParticipant(String userId) {
-        if (!participants.contains(userId)) {
-            participants.add(userId);
-        }
+        participants.add(userId);
     }
 
     public void removeParticipant(String userId) {
@@ -239,9 +250,7 @@ public class Room {
     }
 
     public void addWaitingUser(String userId) {
-        if (!waitingUsers.contains(userId)) {
-            waitingUsers.add(userId);
-        }
+        waitingUsers.add(userId);
     }
 
     public void removeWaitingUser(String userId) {
@@ -250,9 +259,7 @@ public class Room {
 
     public void approveUser(String userId) {
         removeWaitingUser(userId);
-        if (!approvedUsers.contains(userId)) {
-            approvedUsers.add(userId);
-        }
+        approvedUsers.add(userId);
     }
 
     public boolean isUserApproved(String userId) {
@@ -263,5 +270,30 @@ public class Room {
         return !isLocked && 
                participants.size() < maxParticipants && 
                (isUserApproved(userId) || !isPrivate);
+    }
+
+    // Additional helper methods for Set
+    public boolean hasParticipant(String userId) {
+        return participants.contains(userId);
+    }
+
+    public boolean hasWaitingUser(String userId) {
+        return waitingUsers.contains(userId);
+    }
+
+    public boolean hasApprovedUser(String userId) {
+        return approvedUsers.contains(userId);
+    }
+
+    public int getParticipantCount() {
+        return participants.size();
+    }
+
+    public int getWaitingUserCount() {
+        return waitingUsers.size();
+    }
+
+    public int getApprovedUserCount() {
+        return approvedUsers.size();
     }
 }

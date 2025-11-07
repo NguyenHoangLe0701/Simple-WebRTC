@@ -1,15 +1,16 @@
 package com.smartchat.chatfacetimesmartdev.service;
 
-import com.smartchat.chatfacetimesmartdev.entity.User;
-import com.smartchat.chatfacetimesmartdev.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.smartchat.chatfacetimesmartdev.entity.User;
+import com.smartchat.chatfacetimesmartdev.repository.UserRepository;
 
 @Service
 public class UserService {
@@ -52,7 +53,9 @@ public class UserService {
     public Map<String, Object> getSystemStats() {
         List<User> allUsers = userRepository.findAll();
         long totalUsers = allUsers.size();
-        long activeUsers = allUsers.stream().filter(user -> user.getActive()).count();
+        
+        // SỬA Ở ĐÂY: thay user.getActive() thành user.isActive()
+        long activeUsers = allUsers.stream().filter(user -> user.isActive()).count();
         long adminUsers = allUsers.stream().filter(user -> user.getRole() == User.Role.ADMIN).count();
         
         Map<String, Object> stats = new HashMap<>();
