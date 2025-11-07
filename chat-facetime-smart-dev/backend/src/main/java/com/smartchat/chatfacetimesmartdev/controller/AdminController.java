@@ -77,10 +77,12 @@ public class AdminController {
             Optional<User> userOpt = userRepository.findById(id);
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                user.setActive(!user.getActive());
+                // SỬA 1: user.getActive() → user.isActive()
+                user.setActive(!user.isActive());
                 user.setUpdatedAt(LocalDateTime.now());
                 userRepository.save(user);
-                return ResponseEntity.ok(Map.of("message", "Cập nhật trạng thái thành công", "isActive", user.getActive()));
+                // SỬA 2: user.getActive() → user.isActive()
+                return ResponseEntity.ok(Map.of("message", "Cập nhật trạng thái thành công", "isActive", user.isActive()));
             } else {
                 return ResponseEntity.notFound().build();
             }
