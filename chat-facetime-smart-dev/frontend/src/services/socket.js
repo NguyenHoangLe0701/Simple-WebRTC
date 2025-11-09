@@ -283,7 +283,7 @@ class SocketService {
       await this.send(`/app/room/${roomId}/join`, userData);
       // 🔇 ĐÃ GIẢM BỚT LOG
       // console.log('✅ Joined room:', roomId);
-  D } catch (error) {
+   } catch (error) {
       console.error('❌ Join room failed:', error); // Giữ log lỗi
       throw error;
     }
