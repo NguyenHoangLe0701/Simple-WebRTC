@@ -71,6 +71,9 @@ const ChatRoom = () => {
   const [editingContent, setEditingContent] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  //Thêm mới "TYPING INDICATOR"
+  const [typingUsers, setTypingUsers] = useState([]);
+  const typingTimeoutRef = useRef(null);
   
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -93,6 +96,7 @@ const ChatRoom = () => {
     setConnectionStatus('connecting');
     
     let chatSub, presenceSub, signalSub;
+    let typingSub; //THÊM MỚI
     let cleanupCalled = false;
     
     const initializeSocket = async () => {
@@ -173,9 +177,30 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
           }
         });
         
-       
+       // 🆕 === BẮT ĐẦU THÊM MỚI (TYPING INDICATOR) ===
+               typingSub = await socketService.subscribeToTyping(roomId, (typingData) => {
+                  try {
+                    const user = typingData.user;
+                    const currentUserId = currentUser?.id || currentUser?.userId || currentUser?.username;
+        
+                    // Bỏ qua nếu là sự kiện của chính mình
+                    if (!user || user.id === currentUserId) {
+                      return;
+                    }
+        
+                    const userName = user.name || 'Một ai đó';
+        
+                    if (typingData.type === 'TYPING_START') {
+                      setTypingUsers(prev => [...new Set([...prev, userName])]);
+                    } else if (typingData.type === 'TYPING_STOP') {
+                      setTypingUsers(prev => prev.filter(name => name !== userName));
+                    }
+                  } catch (e) {
+                    console.error('Error processing typing message:', e);
+                  }
+                });
 
-        // 🆕 SỬA QUAN TRỌNG: GỬI ĐÚNG USER DATA
+        //SỬA QUAN TRỌNG: GỬI ĐÚNG USER DATA
         const userData = {
           id: currentUser?.id || currentUser?.userId || currentUser?.username,
           userId: currentUser?.id || currentUser?.userId || currentUser?.username,
@@ -249,22 +274,58 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
     };
   }, []);
 
-  // 🆕 SỬA: SEND MESSAGE
+    // 🆕 === BẮT ĐẦU THÊM MỚI (HÀM GỬI TYPING) ===
+  const sendStopTypingEvent = () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+        
+        const userData = { 
+          id: currentUser?.id || currentUser?.userId || currentUser?.username, 
+          name: currentUser?.fullName || currentUser?.username 
+        };
+        socketService.sendTypingStop(roomId, userData);
+      }
+    };
+  
+    const handleTyping = () => {
+      const userData = { 
+        id: currentUser?.id || currentUser?.userId || currentUser?.username, 
+        name: currentUser?.fullName || currentUser?.username 
+      };
+      
+      // Gửi 'start' chỉ lần đầu tiên
+      if (!typingTimeoutRef.current) {
+        socketService.sendTypingStart(roomId, userData);
+      } else {
+        // Nếu đang gõ, xóa timer 'stop' cũ
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Đặt timer 'stop' mới
+      typingTimeoutRef.current = setTimeout(() => {
+        socketService.sendTypingStop(roomId, userData);
+        typingTimeoutRef.current = null; // Reset ref
+      }, 2000); // Ngừng gõ sau 2 giây
+    };
+
+  // SỬA: SEND MESSAGE
+  // sendMessage (Cập nhật để gửi "stop typing")
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
-    
+    sendStopTypingEvent(); //THÊM MỚI: Dừng gõ khi gửi
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const senderId = currentUser?.id || currentUser?.userId || currentUser?.username || 'unknown';
     const senderName = currentUser?.fullName || currentUser?.username || 'You';
     
-    // 🆕 SỬA: GỬI ĐÚNG FORMAT BACKEND MONG ĐỢI
+    //SỬA: GỬI ĐÚNG FORMAT BACKEND MONG ĐỢI
     const message = {
       id: messageId,
-      sender: senderName,        // 👈 QUAN TRỌNG: backend dùng field này
-      senderId: senderId,        // 👈 QUAN TRỌNG  
+      sender: senderName,        
+      senderId: senderId,        
       content: newMessage.trim(),
-      type: 'text',              // 👈 QUAN TRỌNG: phải là string 'text'
-      roomId: roomId,            // 👈 THÊM roomId
+      type: 'text',              //  QUAN TRỌNG: phải là string 'text'
+      roomId: roomId,            //  THÊM roomId
       timestamp: new Date().toISOString(),
       avatar: senderName.charAt(0).toUpperCase()
     };
@@ -848,13 +909,29 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
         />
 
         {/* Message Input */}
-        <div className="bg-white border-t border-gray-200 p-4">
+       {/* Message Input */}
+               <div className="bg-white border-t border-gray-200 p-4">
           {replyTo && (
             <div className="mb-2 text-xs text-gray-600 border-l-2 border-blue-400 pl-2">
               Trả lời {replyTo.sender}: {String(replyTo.content).slice(0,120)}
               <button className="ml-2 text-blue-600" onClick={()=>setReplyTo(null)}>Hủy</button>
             </div>
           )}
+          
+          {/* 🆕 === FIX LỖI VỊ TRÍ === */}
+          {/* (1) Hiển thị "Đang nhập..." CỦA BẠN (local) */}
+          {isTyping && (
+            <div className="mb-2 text-xs text-gray-500 italic">Bạn đang nhập...</div>
+          )}
+          
+          {/* (2) Hiển thị "Đang nhập..." CỦA NGƯỜI KHÁC (remote) */}
+          {typingUsers.length > 0 && (
+            <div className="mb-2 text-xs text-gray-500 italic">
+              {typingUsers.join(', ')} đang soạn tin...
+            </div>
+          )}
+          {/* 🆕 === KẾT THÚC FIX === */}
+
           <div className="flex items-center space-x-2">
             <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-500 hover:text-gray-700"><Paperclip className="h-5 w-5" /></button>
             <button onClick={() => setShowCodeEditor(true)} className="p-2 text-gray-500 hover:text-gray-700"><Code className="h-5 w-5" /></button>
@@ -864,16 +941,23 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
                 value={newMessage}
                 onChange={(e) => {
                   setNewMessage(e.target.value);
-                  setIsTyping(true);
+                  
+                    {/*  CẬP NHẬT: Gọi cả 2 logic */}
+                  // (1) Logic "isTyping" local 
+                    setIsTyping(true);
                   if (window.__typingTimer) {
                     clearTimeout(window.__typingTimer);
                   }
                   window.__typingTimer = window.setTimeout(()=>setIsTyping(false), 1200);
+
+                    // (2) Logic "typing" remote
+                    handleTyping(); 
                 }} 
-                onKeyDown={async (e) => { // 🆕 THÊM ASYNC
+                onKeyDown={async (e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    await sendMessage(); // 🆕 AWAIT SENDMESSAGE
+                    sendStopTypingEvent(); // Dừng gõ khi gửi
+                    await sendMessage();
                   }
                 }} 
                 placeholder="Nhập tin nhắn..." 
@@ -882,7 +966,7 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
               <button onClick={()=>setShowEmoji(v=>!v)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"><Smile className="h-5 w-5" /></button>
               {showEmoji && (
                 <div className="absolute bottom-12 right-0 z-50 bg-white rounded-lg shadow-lg border p-2 w-64">
-                  <div className="grid grid-cols-8 gap-1 text-xl">
+                    <div className="grid grid-cols-8 gap-1 text-xl">
                     {EMOJIS.map((e, i) => (
                       <button key={i} className="hover:bg-gray-100 rounded" onClick={() => { setNewMessage(prev => prev + e); setShowEmoji(false); }}>
                         {e}
@@ -894,17 +978,25 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
             </div>
             <button onClick={sendMessage} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Send className="h-5 w-5" /></button>
           </div>
+
+          {/*ĐÃ BỊ XÓA KHỎI VỊ TRÍ NÀY VÀ DI CHUYỂN LÊN TRÊN
           {isTyping && (
             <div className="mt-2 text-xs text-gray-500">Đang nhập...</div>
           )}
+          */}
+          
           <input 
             ref={fileInputRef} 
             type="file" 
-            onChange={handleFileUpload} // 🆕 SỬ DỤNG ASYNC HANDLEFILEUPLOAD
+            onChange={handleFileUpload}
             className="hidden" 
             accept="image/*,.txt,.js,.py,.java,.cpp,.html,.css,.json,.md" 
           />
         </div>
+        {/* // =============================================
+          // ⬆️ === KẾT THÚC PHẦN CẬP NHẬT === ⬆️
+          // =============================================
+        */}
       </div>
 
       {/* AI Assistant */}
