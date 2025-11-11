@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
+import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.annotation.SubscribeMapping;
 import org.springframework.stereotype.Controller;
@@ -220,6 +221,55 @@ public class RoomWebSocketController {
             e.printStackTrace();
         }
     }
+    
+    @MessageMapping("/room/{roomId}/typing/start")
+public void handleUserTypingStart(
+        @DestinationVariable String roomId,
+        @Payload Map<String, Object> payload,
+        SimpMessageHeaderAccessor headerAccessor) {
+
+    String userId = getStringSafe(payload, "id");
+    String userName = getStringSafe(payload, "name");
+    String sessionId = headerAccessor.getSessionId();
+
+    if (userId == null) return;
+
+    System.out.println("💬 Typing start: " + userName + " in room " + roomId);
+
+    Map<String, Object> userMap = Map.of("id", userId, "name", userName);
+    Map<String, Object> typingEvent = Map.of(
+        "type", "TYPING_START",
+        "user", userMap,
+        "sessionId", sessionId // gửi kèm sessionId để client tự bỏ qua chính nó
+    );
+
+    // Broadcast cho mọi người trong topic
+    messagingTemplate.convertAndSend("/topic/room/" + roomId + "/typing", typingEvent);
+}
+
+@MessageMapping("/room/{roomId}/typing/stop")
+public void handleUserTypingStop(
+        @DestinationVariable String roomId,
+        @Payload Map<String, Object> payload,
+        SimpMessageHeaderAccessor headerAccessor) {
+
+    String userId = getStringSafe(payload, "id");
+    String userName = getStringSafe(payload, "name");
+    String sessionId = headerAccessor.getSessionId();
+
+    if (userId == null) return;
+
+    System.out.println("💬 Typing stop: " + userName + " in room " + roomId);
+
+    Map<String, Object> userMap = Map.of("id", userId, "name", userName);
+    Map<String, Object> typingEvent = Map.of(
+        "type", "TYPING_STOP",
+        "user", userMap,
+        "sessionId", sessionId
+    );
+
+    messagingTemplate.convertAndSend("/topic/room/" + roomId + "/typing", typingEvent);
+}
 
     @SubscribeMapping("/topic/presence/{roomId}")
     public void onSubscribePresence(@DestinationVariable String roomId) {
