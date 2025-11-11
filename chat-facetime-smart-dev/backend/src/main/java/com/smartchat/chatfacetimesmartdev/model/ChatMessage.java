@@ -1,6 +1,7 @@
 package com.smartchat.chatfacetimesmartdev.model;
 
-import java.time.LocalDateTime;
+// import java.time.LocalDateTime; đổi từ localdatetime thành Instal lấy giờ chuẩn UTC quốc tế thay vì nếu giờ của server
+import java.time.Instant;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -22,17 +23,18 @@ public class ChatMessage {
     private String roomId;
     private String senderId;
     private String senderName;
-    private String sender;      // 👈 QUAN TRỌNG: để nhận từ frontend
+    private String sender;      // QUAN TRỌNG: để nhận từ frontend
     private String content;
     private MessageType type;
-    private LocalDateTime timestamp;
+    // private LocalDateTime timestamp;
+    private Instant timestamp;
     private String codeLanguage;
     private String fileName;
-    private String avatar;      // 👈 QUAN TRỌNG
-    private Map<String, Object> replyTo; // 🆕 THÊM FIELD REPLYTO
+    private String avatar;      // QUAN TRỌNG
+    private Map<String, Object> replyTo; // THÊM FIELD REPLYTO
     private Map<String, Object> reactions;
 
-    // 🆕 CONSTRUCTOR ĐỂ DỄ DÀNG TẠO OBJECT
+    //  CONSTRUCTOR ĐỂ DỄ DÀNG TẠO OBJECT
     public ChatMessage(String id, String roomId, String sender, String senderId, String content, MessageType type) {
         this.id = id;
         this.roomId = roomId;
@@ -40,14 +42,14 @@ public class ChatMessage {
         this.senderId = senderId;
         this.content = content;
         this.type = type != null ? type : MessageType.TEXT;
-        this.timestamp = LocalDateTime.now();
-        // 🆕 TẠO AVATAR TỰ ĐỘNG TỪ SENDER NAME
+        this.timestamp = Instant.now();
+        //  TẠO AVATAR TỰ ĐỘNG TỪ SENDER NAME
         if (sender != null && !sender.isEmpty()) {
             this.avatar = sender.substring(0, 1).toUpperCase();
         }
     }
 
-    // 👇 Getter ưu tiên sender - 🆕 CẢI THIỆN LOGIC
+    // Getter ưu tiên sender -  CẢI THIỆN LOGIC
     public String getDisplaySender() {
         if (this.sender != null && !this.sender.trim().isEmpty()) {
             return this.sender;
@@ -58,7 +60,7 @@ public class ChatMessage {
         return "Unknown";
     }
 
-    // 🆕 GETTER ĐỂ ĐẢM BẢO AVATAR LUÔN CÓ GIÁ TRỊ
+    //  GETTER ĐỂ ĐẢM BẢO AVATAR LUÔN CÓ GIÁ TRỊ
     public String getAvatar() {
         if (this.avatar != null && !this.avatar.trim().isEmpty()) {
             return this.avatar;
@@ -71,7 +73,7 @@ public class ChatMessage {
         return "U";
     }
 
-    // 🆕 GETTER ĐỂ ĐẢM BẢO SENDER ID LUÔN CÓ GIÁ TRỊ
+    //  GETTER ĐỂ ĐẢM BẢO SENDER ID LUÔN CÓ GIÁ TRỊ
     public String getSenderId() {
         if (this.senderId != null && !this.senderId.trim().isEmpty()) {
             return this.senderId;
@@ -80,22 +82,22 @@ public class ChatMessage {
         return getDisplaySender();
     }
 
-    // 🆕 GETTER ĐỂ ĐẢM BẢO TIMESTAMP LUÔN CÓ GIÁ TRỊ
-    public LocalDateTime getTimestamp() {
-        return this.timestamp != null ? this.timestamp : LocalDateTime.now();
+    //  GETTER ĐỂ ĐẢM BẢO TIMESTAMP LUÔN CÓ GIÁ TRỊ
+    public Instant getTimestamp() {
+        return this.timestamp != null ? this.timestamp : Instant.now();
     }
 
-    // 🆕 GETTER ĐỂ ĐẢM BẢO TYPE LUÔN CÓ GIÁ TRỊ
+    //  GETTER ĐỂ ĐẢM BẢO TYPE LUÔN CÓ GIÁ TRỊ
     public MessageType getType() {
         return this.type != null ? this.type : MessageType.TEXT;
     }
 
-    // 🆕 GETTER ĐỂ ĐẢM BẢO ROOM ID LUÔN CÓ GIÁ TRỊ
+    //  GETTER ĐỂ ĐẢM BẢO ROOM ID LUÔN CÓ GIÁ TRỊ
     public String getRoomId() {
         return this.roomId != null ? this.roomId : "general";
     }
 
-    // 🆕 METHOD ĐỂ KIỂM TRA MESSAGE CÓ HỢP LỆ KHÔNG
+    //  METHOD ĐỂ KIỂM TRA MESSAGE CÓ HỢP LỆ KHÔNG
     public boolean isValid() {
         return this.id != null && 
                !this.id.trim().isEmpty() && 
@@ -104,14 +106,14 @@ public class ChatMessage {
                getDisplaySender() != null;
     }
 
-    // 🆕 METHOD ĐỂ LOG THÔNG TIN MESSAGE
+    //  METHOD ĐỂ LOG THÔNG TIN MESSAGE
     public String toLogString() {
         return String.format("Message[id=%s, room=%s, sender=%s, type=%s, content=%s]",
                 id, getRoomId(), getDisplaySender(), getType(),
                 content != null ? (content.length() > 50 ? content.substring(0, 50) + "..." : content) : "null");
     }
 
-    // 🆕 THÊM METHOD ĐỂ TẠO SYSTEM MESSAGE
+    //  THÊM METHOD ĐỂ TẠO SYSTEM MESSAGE
     public static ChatMessage createSystemMessage(String roomId, String content) {
         return ChatMessage.builder()
                 .id("system_" + System.currentTimeMillis())
@@ -124,7 +126,7 @@ public class ChatMessage {
                 .build();
     }
 
-    // 🆕 THÊM METHOD ĐỂ TẠO CALL MESSAGE
+    //  THÊM METHOD ĐỂ TẠO CALL MESSAGE
     public static ChatMessage createCallMessage(String roomId, String sender, String senderId, MessageType callType, String action) {
         String content = "";
         if (callType == MessageType.VIDEO_CALL) {
@@ -143,7 +145,7 @@ public class ChatMessage {
                 .build();
     }
 
-    // 🆕 THÊM METHOD ĐỂ TẠO JOIN/LEAVE MESSAGE
+    //  THÊM METHOD ĐỂ TẠO JOIN/LEAVE MESSAGE
     public static ChatMessage createPresenceMessage(String roomId, String username, String action) {
         String content = action.equals("join") ? 
             username + " đã tham gia phòng" : 
@@ -160,7 +162,7 @@ public class ChatMessage {
                 .build();
     }
 
-    // 🆕 BUILDER PATTERN ĐỂ DỄ DÀNG TẠO MESSAGE
+    //  BUILDER PATTERN ĐỂ DỄ DÀNG TẠO MESSAGE
     public static ChatMessageBuilder builder() {
         return new ChatMessageBuilder();
     }
@@ -173,7 +175,8 @@ public class ChatMessage {
         private String sender;
         private String content;
         private MessageType type = MessageType.TEXT;
-        private LocalDateTime timestamp;
+        // private LocalDateTime timestamp;
+        private Instant timestamp;
         private String codeLanguage;
         private String fileName;
         private String avatar;
@@ -215,7 +218,7 @@ public class ChatMessage {
             return this;
         }
 
-        public ChatMessageBuilder timestamp(LocalDateTime timestamp) {
+        public ChatMessageBuilder timestamp(Instant timestamp) {
             this.timestamp = timestamp;
             return this;
         }
@@ -254,14 +257,15 @@ public class ChatMessage {
             message.sender = this.sender;
             message.content = this.content;
             message.type = this.type;
-            message.timestamp = this.timestamp != null ? this.timestamp : LocalDateTime.now();
+            // message.timestamp = this.timestamp != null ? this.timestamp : LocalDateTime.now();
+            message.timestamp = this.timestamp != null ? this.timestamp : Instant.now();
             message.codeLanguage = this.codeLanguage;
             message.fileName = this.fileName;
             message.avatar = this.avatar;
             message.replyTo = this.replyTo;
             message.reactions = this.reactions;
             
-            // 🆕 AUTO-GENERATE MISSING FIELDS
+            // AUTO-GENERATE MISSING FIELDS
             if (message.avatar == null && message.sender != null) {
                 message.avatar = message.sender.substring(0, 1).toUpperCase();
             }
@@ -301,28 +305,28 @@ public class ChatMessage {
             return this.name().toLowerCase();
         }
 
-        // 🆕 METHOD KIỂM TRA TYPE CÓ PHẢI LÀ MEDIA KHÔNG
+        // METHOD KIỂM TRA TYPE CÓ PHẢI LÀ MEDIA KHÔNG
         public boolean isMedia() {
             return this == IMAGE || this == FILE;
         }
 
-        // 🆕 METHOD KIỂM TRA TYPE CÓ PHẢI LÀ CALL KHÔNG
+        // METHOD KIỂM TRA TYPE CÓ PHẢI LÀ CALL KHÔNG
         public boolean isCall() {
             return this == VIDEO_CALL || this == VOICE_CALL;
         }
 
-        // 🆕 METHOD KIỂM TRA TYPE CÓ PHẢI LÀ SYSTEM KHÔNG
+        //  METHOD KIỂM TRA TYPE CÓ PHẢI LÀ SYSTEM KHÔNG
         public boolean isSystem() {
             return this == SYSTEM;
         }
 
-        // 🆕 METHOD KIỂM TRA TYPE CÓ PHẢI LÀ CODE KHÔNG
+        // METHOD KIỂM TRA TYPE CÓ PHẢI LÀ CODE KHÔNG
         public boolean isCode() {
             return this == CODE;
         }
     }
 
-    // 🆕 OVERRIDE toString ĐỂ LOG DỄ ĐỌC HƠN
+    //  OVERRIDE toString ĐỂ LOG DỄ ĐỌC HƠN
     @Override
     public String toString() {
         return String.format(
@@ -333,7 +337,7 @@ public class ChatMessage {
         );
     }
 
-    // 🆕 THÊM METHOD EQUALS VÀ HASHCODE ĐỂ SO SÁNH MESSAGE
+    //  THÊM METHOD EQUALS VÀ HASHCODE ĐỂ SO SÁNH MESSAGE
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
@@ -347,7 +351,7 @@ public class ChatMessage {
         return id != null ? id.hashCode() : 0;
     }
 
-    // 🆕 METHOD ĐỂ TẠO COPY CỦA MESSAGE
+    // METHOD ĐỂ TẠO COPY CỦA MESSAGE
     public ChatMessage copy() {
         return ChatMessage.builder()
                 .id(this.id)
