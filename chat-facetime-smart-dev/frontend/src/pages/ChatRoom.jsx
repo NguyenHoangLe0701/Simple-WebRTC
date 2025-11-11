@@ -29,6 +29,7 @@ import EnhancedVideoCall from '../components/EnhancedVideoCall';
 import CodeEditor from '../components/CodeEditor';
 import { Virtuoso } from 'react-virtuoso';
 import socketService from '../services/socket';
+import FileUploadService from '../services/FileUploadService';
 
 const ChatRoom = () => {
   const { roomId = 'general' } = useParams();
@@ -71,9 +72,10 @@ const ChatRoom = () => {
   const [editingContent, setEditingContent] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [uploadProgress, setUploadProgress] = useState(null);
   //Thêm mới "TYPING INDICATOR"
   const [typingUsers, setTypingUsers] = useState([]);
-  const typingTimeoutRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
   
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -178,27 +180,27 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
         });
         
        // 🆕 === BẮT ĐẦU THÊM MỚI (TYPING INDICATOR) ===
-               typingSub = await socketService.subscribeToTyping(roomId, (typingData) => {
-                  try {
-                    const user = typingData.user;
-                    const currentUserId = currentUser?.id || currentUser?.userId || currentUser?.username;
+               typingSub = await socketService.subscribeToTyping(roomId, (typingData) => {
+                  try {
+                    const user = typingData.user;
+                    const currentUserId = currentUser?.id || currentUser?.userId || currentUser?.username;
         
-                    // Bỏ qua nếu là sự kiện của chính mình
-                    if (!user || user.id === currentUserId) {
-                      return;
-                    }
+                    // Bỏ qua nếu là sự kiện của chính mình
+                    if (!user || user.id === currentUserId) {
+                      return;
+                    }
         
-                    const userName = user.name || 'Một ai đó';
+                    const userName = user.name || 'Một ai đó';
         
-                    if (typingData.type === 'TYPING_START') {
-                      setTypingUsers(prev => [...new Set([...prev, userName])]);
-                    } else if (typingData.type === 'TYPING_STOP') {
-                      setTypingUsers(prev => prev.filter(name => name !== userName));
-                    }
-                  } catch (e) {
-                    console.error('Error processing typing message:', e);
-                  }
-                });
+                    if (typingData.type === 'TYPING_START') {
+                      setTypingUsers(prev => [...new Set([...prev, userName])]);
+                    } else if (typingData.type === 'TYPING_STOP') {
+                      setTypingUsers(prev => prev.filter(name => name !== userName));
+                    }
+                  } catch (e) {
+                    console.error('Error processing typing message:', e);
+                  }
+                });
 
         //SỬA QUAN TRỌNG: GỬI ĐÚNG USER DATA
         const userData = {
@@ -275,39 +277,39 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
   }, []);
 
     // 🆕 === BẮT ĐẦU THÊM MỚI (HÀM GỬI TYPING) ===
-  const sendStopTypingEvent = () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = null;
-        
-        const userData = { 
-          id: currentUser?.id || currentUser?.userId || currentUser?.username, 
-          name: currentUser?.fullName || currentUser?.username 
-        };
-        socketService.sendTypingStop(roomId, userData);
-      }
-    };
+  const sendStopTypingEvent = () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+        
+        const userData = { 
+          id: currentUser?.id || currentUser?.userId || currentUser?.username, 
+          name: currentUser?.fullName || currentUser?.username 
+        };
+        socketService.sendTypingStop(roomId, userData);
+      }
+    };
   
-    const handleTyping = () => {
-      const userData = { 
-        id: currentUser?.id || currentUser?.userId || currentUser?.username, 
-        name: currentUser?.fullName || currentUser?.username 
-      };
-      
-      // Gửi 'start' chỉ lần đầu tiên
-      if (!typingTimeoutRef.current) {
-        socketService.sendTypingStart(roomId, userData);
-      } else {
-        // Nếu đang gõ, xóa timer 'stop' cũ
-        clearTimeout(typingTimeoutRef.current);
-      }
-      
-      // Đặt timer 'stop' mới
-      typingTimeoutRef.current = setTimeout(() => {
-        socketService.sendTypingStop(roomId, userData);
-        typingTimeoutRef.current = null; // Reset ref
-      }, 2000); // Ngừng gõ sau 2 giây
-    };
+    const handleTyping = () => {
+      const userData = { 
+        id: currentUser?.id || currentUser?.userId || currentUser?.username, 
+        name: currentUser?.fullName || currentUser?.username 
+      };
+      
+      // Gửi 'start' chỉ lần đầu tiên
+      if (!typingTimeoutRef.current) {
+        socketService.sendTypingStart(roomId, userData);
+      } else {
+        // Nếu đang gõ, xóa timer 'stop' cũ
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Đặt timer 'stop' mới
+      typingTimeoutRef.current = setTimeout(() => {
+        socketService.sendTypingStop(roomId, userData);
+        typingTimeoutRef.current = null; // Reset ref
+      }, 2000); // Ngừng gõ sau 2 giây
+    };
 
   // SỬA: SEND MESSAGE
   // sendMessage (Cập nhật để gửi "stop typing")
@@ -381,51 +383,68 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
     }
   };
 
-  // 🆕 SỬA: HANDLE FILE UPLOAD
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setImagePreviews(prev => [...prev, { 
-          name: file.name, 
-          size: file.size, 
-          dataUrl: e.target.result 
-        }]);
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
-
-    const messageId = `file_${Date.now()}`;
-    const senderName = currentUser?.fullName || currentUser?.username || 'You';
-    
-    const message = {
-      id: messageId,
-      sender: senderName,
-      senderId: currentUser?.id || currentUser?.username,
-      content: file.name,
-      timestamp: new Date().toISOString(),
-      type: 'file',
-      fileName: file.name,
-      fileSize: file.size,
-      avatar: senderName.charAt(0).toUpperCase(),
-      roomId: roomId
-    };
-    
-    setMessages(prev => [...prev, message]);
-    
-    try {
-      await socketService.sendMessage(roomId, message);
-      console.log('✅ File message sent successfully');
-    } catch (err) {
-      console.error('❌ Error sending file message:', err);
-      setMessages(prev => prev.filter(m => m.id !== messageId));
-    }
-  };
-
+ // 🆕 SỬA: HANDLE FILE UPLOAD (ĐÃ THAY THẾ)
+   const handleFileUpload = async (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+  
+      // Giới hạn kích thước file (ví dụ: 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        alert("Chỉ cho phép file dưới 10MB");
+        return;
+      }
+  
+      // Xóa preview ảnh cũ (nếu có)
+      setImagePreviews([]);
+      
+      try {
+        // 1. Bắt đầu hiển thị thanh progress
+        setUploadProgress(0); 
+        
+        // 2. Tải file lên Cloudinary (DÙNG SERVICE MỚI)
+        const fileUrl = await FileUploadService.uploadFile(file, (progress) => {
+          setUploadProgress(progress);
+        });
+  
+        // 3. Quyết định loại tin nhắn
+        // 🆕 SỬA: Dùng 'image' thay vì 'IMAGE' để khớp code render của bạn
+        const messageType = file.type.startsWith('image/') ? 'image' : 'file';
+  
+        // 4. Gửi tin nhắn qua socket
+        const messageId = `${messageType}_${Date.now()}`;
+        const senderName = currentUser?.fullName || currentUser?.username || 'You';
+        
+        const message = {
+          id: messageId,
+          sender: senderName,
+          senderId: currentUser?.id || currentUser?.username,
+          content: fileUrl, // QUAN TRỌNG: content là URL
+          timestamp: new Date().toISOString(),
+          type: messageType, // 'image' hoặc 'file'
+          fileName: file.name,
+          fileSize: file.size,
+          avatar: senderName.charAt(0).toUpperCase(),
+          roomId: roomId
+        };
+        
+        // Gửi qua socket
+        await socketService.sendMessage(roomId, message);
+        console.log('✅ File message sent successfully');
+        
+        // Thêm vào UI (Optimistic update)
+        setMessages(prev => [...prev, message]);
+  
+      } catch (error) {
+        console.error('❌ Không thể gửi file:', error);
+        alert("Gửi file thất bại. Bạn đã đăng ký Cloudinary và cấu hình file service chưa?");
+      } finally {
+        // 5. Ẩn thanh progress và reset input
+        setUploadProgress(null); 
+        if (fileInputRef.current) {
+          fileInputRef.current.value = null; 
+        }
+      }
+    };
   // Các hàm khác giữ nguyên
   const startVideoCall = () => {
     setIsVideoCall(true);
@@ -842,18 +861,34 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
                             <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 p-2 rounded border">{message.content}</pre>
                           </div>
                         )}
+                        {/* Vị trí thêm code mới upload file */}
                         {message.type === 'file' && (
-                          <div className="bg-gray-100 rounded-lg p-3 mt-2 flex items-center space-x-3">
-                            <FileText className="h-8 w-8 text-blue-500" />
-                            <div className="flex-1">
-                              <p className="font-medium text-sm">{message.fileName}</p>
-                              <p className="text-xs text-gray-500">{message.fileSize} bytes</p>
-                            </div>
-                            <button className="text-blue-600 hover:text-blue-800">
-                              <Download className="h-4 w-4" />
-                            </button>
-                          </div>
-                        )}
+                          <a 
+                            href={message.content} // Dùng content (URL)
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="bg-gray-100 rounded-lg p-3 mt-2 flex items-center space-x-3 hover:bg-gray-200"
+                            download={message.fileName} // Thêm 'download'
+                          >
+                            <FileText className="h-8 w-8 text-blue-500" />
+                            <div className="flex-1">
+                              <p className="font-medium text-sm text-gray-900">{message.fileName}</p>
+                              {message.fileSize && (
+                              <p className="text-xs text-gray-500">{(message.fileSize / 1024).toFixed(1)} KB</p>
+                            )}
+                            </div>
+                            <Download className="h-4 w-4 text-gray-600" />
+                          </a>
+                        )}    
+                           {message.type === 'image' && (
+                         <img 
+                          src={message.content} // Dùng content (URL)
+                          alt={message.fileName || 'Hình ảnh'}
+                          className="max-w-xs rounded-lg object-cover cursor-pointer mt-2" 
+                          onClick={() => window.open(message.content, '_blank')} // Click để xem ảnh
+                        />
+                      )}
+                        {/* KẾt thúc upload file */}
                         <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
                           <button onClick={()=>setReplyTo(message)} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Trả lời</button>
                           <button onClick={()=>{
@@ -880,24 +915,7 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
           )}
         </div>
 
-        {/* Selected image previews */}
-        {imagePreviews.length > 0 && (
-          <div className="bg-white border-t border-gray-200 px-4 py-3">
-            <div className="flex flex-wrap gap-3">
-              {imagePreviews.map((img, idx) => (
-                <div key={idx} className="relative w-24 h-24 rounded-lg overflow-hidden border">
-                  <img src={img.dataUrl} alt={img.name} className="w-full h-full object-cover" />
-                  <button
-                    onClick={() => setImagePreviews(prev => prev.filter((_, i) => i !== idx))}
-                    className="absolute top-1 right-1 bg-black/60 text-white text-xs rounded px-1"
-                  >
-                    x
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+     
 
         {/* Code Editor */}
         <CodeEditor 
@@ -908,64 +926,72 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
           initialLanguage={codeLanguage} 
         />
 
-        {/* Message Input */}
+       
        {/* Message Input */}
-               <div className="bg-white border-t border-gray-200 p-4">
-          {replyTo && (
-            <div className="mb-2 text-xs text-gray-600 border-l-2 border-blue-400 pl-2">
-              Trả lời {replyTo.sender}: {String(replyTo.content).slice(0,120)}
-              <button className="ml-2 text-blue-600" onClick={()=>setReplyTo(null)}>Hủy</button>
-            </div>
-          )}
-          
-          {/* 🆕 === FIX LỖI VỊ TRÍ === */}
+               <div className="bg-white border-t border-gray-200 p-4">
+       {uploadProgress !== null && (
+              <div className="mb-2">
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
+                </div>
+                <p className="text-center text-xs text-gray-500 mt-1">Đang tải lên... {uploadProgress}%</p>
+              </div>
+            )}
+          {replyTo && (
+            <div className="mb-2 text-xs text-gray-600 border-l-2 border-blue-400 pl-2">
+              Trả lời {replyTo.sender}: {String(replyTo.content).slice(0,120)}
+              <button className="ml-2 text-blue-600" onClick={()=>setReplyTo(null)}>Hủy</button>
+            </div>
+          )}
+          
+          {/* === FIX LỖI VỊ TRÍ === */}
           {/* (1) Hiển thị "Đang nhập..." CỦA BẠN (local) */}
-          {isTyping && (
-            <div className="mb-2 text-xs text-gray-500 italic">Bạn đang nhập...</div>
-          )}
+          {isTyping && (
+            <div className="mb-2 text-xs text-gray-500 italic">Bạn đang nhập...</div>
+          )}
           
           {/* (2) Hiển thị "Đang nhập..." CỦA NGƯỜI KHÁC (remote) */}
-          {typingUsers.length > 0 && (
-            <div className="mb-2 text-xs text-gray-500 italic">
-              {typingUsers.join(', ')} đang soạn tin...
-            </div>
-          )}
-          {/* 🆕 === KẾT THÚC FIX === */}
+          {typingUsers.length > 0 && (
+            <div className="mb-2 text-xs text-gray-500 italic">
+              {typingUsers.join(', ')} đang soạn tin...
+            </div>
+          )}
+          
 
-          <div className="flex items-center space-x-2">
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-500 hover:text-gray-700"><Paperclip className="h-5 w-5" /></button>
-            <button onClick={() => setShowCodeEditor(true)} className="p-2 text-gray-500 hover:text-gray-700"><Code className="h-5 w-5" /></button>
-            <div className="flex-1 relative">
-              <input 
-                type="text" 
-                value={newMessage}
-                onChange={(e) => {
-                  setNewMessage(e.target.value);
-                  
+          <div className="flex items-center space-x-2">
+            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-500 hover:text-gray-700"><Paperclip className="h-5 w-5" /></button>
+            <button onClick={() => setShowCodeEditor(true)} className="p-2 text-gray-500 hover:text-gray-700"><Code className="h-5 w-5" /></button>
+            <div className="flex-1 relative">
+              <input 
+                type="text" 
+                value={newMessage}
+                onChange={(e) => {
+                  setNewMessage(e.target.value);
+                  
                     {/*  CẬP NHẬT: Gọi cả 2 logic */}
-                  // (1) Logic "isTyping" local 
+                  // (1) Logic "isTyping" local 
                     setIsTyping(true);
-                  if (window.__typingTimer) {
-                    clearTimeout(window.__typingTimer);
-                  }
-                  window.__typingTimer = window.setTimeout(()=>setIsTyping(false), 1200);
+                  if (window.__typingTimer) {
+                    clearTimeout(window.__typingTimer);
+                  }
+                  window.__typingTimer = window.setTimeout(()=>setIsTyping(false), 1200);
 
                     // (2) Logic "typing" remote
                     handleTyping(); 
-                }} 
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendStopTypingEvent(); // Dừng gõ khi gửi
-                    await sendMessage();
-                  }
-                }} 
-                placeholder="Nhập tin nhắn..." 
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              />
-              <button onClick={()=>setShowEmoji(v=>!v)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"><Smile className="h-5 w-5" /></button>
-              {showEmoji && (
-                <div className="absolute bottom-12 right-0 z-50 bg-white rounded-lg shadow-lg border p-2 w-64">
+                }} 
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendStopTypingEvent(); // Dừng gõ khi gửi
+                    await sendMessage();
+                  }
+                }} 
+                placeholder="Nhập tin nhắn..." 
+                className="w-full border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              />
+              <button onClick={()=>setShowEmoji(v=>!v)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"><Smile className="h-5 w-5" /></button>
+              {showEmoji && (
+                <div className="absolute bottom-12 right-0 z-50 bg-white rounded-lg shadow-lg border p-2 w-64">
                     <div className="grid grid-cols-8 gap-1 text-xl">
                     {EMOJIS.map((e, i) => (
                       <button key={i} className="hover:bg-gray-100 rounded" onClick={() => { setNewMessage(prev => prev + e); setShowEmoji(false); }}>
@@ -973,26 +999,34 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-            <button onClick={sendMessage} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Send className="h-5 w-5" /></button>
-          </div>
+                </div>
+              )}
+            </div>
+            <button onClick={sendMessage} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Send className="h-5 w-5" /></button>
+          </div>
 
-          {/*ĐÃ BỊ XÓA KHỎI VỊ TRÍ NÀY VÀ DI CHUYỂN LÊN TRÊN
+          {/*ĐÃ BỊ XÓA KHỎI VỊ TRÍ NÀY VÀ DI CHUYỂN LÊN TRÊN
           {isTyping && (
-            <div className="mt-2 text-xs text-gray-500">Đang nhập...</div>
-          )}
+            <div className="mt-2 text-xs text-gray-500">Đang nhập...</div>
+          )}
           */}
           
+{/*           <input 
+            ref={fileInputRef} 
+            type="file" 
+            onChange={handleFileUpload}
+            className="hidden" 
+            accept="image/*,.txt,.js,.py,.java,.cpp,.html,.css,.json,.md" 
+          /> */}
+
+          {/* Người dùng có thể up mọi file */}
           <input 
-            ref={fileInputRef} 
-            type="file" 
-            onChange={handleFileUpload}
-            className="hidden" 
-            accept="image/*,.txt,.js,.py,.java,.cpp,.html,.css,.json,.md" 
-          />
-        </div>
+            ref={fileInputRef} 
+            type="file" 
+            onChange={handleFileUpload}
+            className="hidden" 
+          />
+        </div>
         {/* // =============================================
           // ⬆️ === KẾT THÚC PHẦN CẬP NHẬT === ⬆️
           // =============================================
