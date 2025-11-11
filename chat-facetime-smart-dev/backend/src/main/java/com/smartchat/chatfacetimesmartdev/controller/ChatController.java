@@ -1,6 +1,7 @@
 package com.smartchat.chatfacetimesmartdev.controller;
 
-import java.time.LocalDateTime;
+// import java.time.LocalDateTime;
+import java.time.Instant; // đổi từ LocalDateTime sang Instant để dùng chuẩn UTC
 import java.util.Map;
 import java.util.UUID;
 
@@ -45,7 +46,8 @@ public class ChatController {
                 message.setType(ChatMessage.MessageType.TEXT);
             }
             
-            message.setTimestamp(LocalDateTime.now());
+            // message.setTimestamp(LocalDateTime.now());
+            message.setTimestamp(Instant.now());
             message.setAvatar(getStringSafe(payload, "avatar"));
             
             if (message.getContent() == null || message.getContent().trim().isEmpty()) {
