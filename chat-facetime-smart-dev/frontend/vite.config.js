@@ -5,11 +5,18 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
 
-  //Định nghĩa biến môi trường an toàn hơn
+
   define: {
     global: 'window',
     'process.env': {},
+    // Thêm __API_URL__ vào khối này
+    __API_URL__: JSON.stringify(
+      mode === 'production'
+        ? 'https://simple-webrtc-4drq.onrender.com'
+        : 'http://localhost:8080'
+    ),
   },
+
 
   //Tối ưu build cho production
   build: {
@@ -51,12 +58,4 @@ export default defineConfig(({ mode }) => ({
         : undefined,
   },
 
-  //Thiết lập baseURL động để build đúng trên Vercel
-  define: {
-    __API_URL__: JSON.stringify(
-      mode === 'production'
-        ? 'https://simple-webrtc-4drq.onrender.com'
-        : 'http://localhost:8080'
-    ),
-  },
 }));
