@@ -20,11 +20,8 @@ public class AIService {
     private RestTemplate restTemplate;
 
     // Đây là "Kho học liệu nhỏ" của bạn, được set sẵn
-    private final String KNOWLEDGE_BASE_PROMPT =
-            "Bạn là một trợ lý AI chuyên gia, chỉ trả lời các câu hỏi liên quan đến 3 chủ đề: WebRTC, Socket, và TCP." +
-                    "Sử dụng kiến thức sau để trả lời:" +
-
-                    "--- BẮT ĐẦU KIẾN THỨC ---" +
+    private final String KNOWLEDGE_BASE =
+            "--- KIẾN THỨC CHUYÊN SÂU VỀ WEBRTC, SOCKET, VÀ TCP ---" +
 
                     "1. WebRTC (Web Real-Time Communication):" +
                     "- Là một công nghệ mã nguồn mở cho phép giao tiếp âm thanh, video, và chia sẻ dữ liệu P2P (peer-to-peer) trực tiếp giữa các trình duyệt web." +
@@ -41,15 +38,22 @@ public class AIService {
                     "- Cung cấp kết nối tin cậy, có thứ tự, và kiểm soát lỗi (error-checked) giữa các ứng dụng." +
                     "- Trước khi gửi dữ liệu, TCP thực hiện 'bắt tay ba bước' (three-way handshake) để thiết lập kết nối." +
 
-                    "--- KẾT THÚC KIẾN THỨC ---" +
+                    "--- KẾT THÚC KIẾN THỨC ---";
 
-                    "Quy tắc trả lời:" +
-                    "1. Chỉ trả lời dựa trên kiến thức được cung cấp ở trên." +
-                    "2. Nếu người dùng hỏi về bất cứ chủ đề nào khác (ví dụ: nấu ăn, lịch sử, ...), hãy từ chối một cách lịch sự và nói rằng 'Tôi chỉ có thể cung cấp thông tin về WebRTC, Socket, và TCP.'" +
-                    "3. Trả lời ngắn gọn, tập trung vào các từ khóa (keyword) mà người dùng hỏi liên quan đến 3 chủ đề trên." +
-                    "4. Luôn trả lời bằng tiếng Việt." +
-
-                    "Câu hỏi của người dùng: ";
+    /**
+     * Kiểm tra xem câu hỏi có liên quan đến kho học liệu không
+     */
+    private boolean isRelatedToKnowledgeBase(String userInput) {
+        String lowerInput = userInput.toLowerCase();
+        String[] keywords = {"webrtc", "socket", "websocket", "tcp", "udp", "p2p", "peer-to-peer", 
+                            "real-time", "realtime", "streaming", "video call", "handshake"};
+        for (String keyword : keywords) {
+            if (lowerInput.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public String getAIResponse(String userInput) {
         // 🆕 KIỂM TRA API KEY
@@ -57,26 +61,50 @@ public class AIService {
             return "Xin lỗi, dịch vụ AI hiện không khả dụng. Vui lòng thử lại sau.";
         }
 
-        String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey;
+        // URL không có query parameter, sẽ dùng header thay thế
+        String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-        // 1. Xây dựng prompt cuối cùng
-        String fullPrompt = KNOWLEDGE_BASE_PROMPT + userInput;
+        // Xây dựng prompt thông minh
+        String fullPrompt;
+        boolean isRelated = isRelatedToKnowledgeBase(userInput);
+        
+        if (isRelated) {
+            // Nếu liên quan đến kho học liệu, ưu tiên sử dụng kiến thức đó
+            fullPrompt = "Bạn là một trợ lý AI chuyên gia. " +
+                    "Khi trả lời câu hỏi về WebRTC, Socket, hoặc TCP, hãy ưu tiên sử dụng kiến thức chuyên sâu sau đây: " +
+                    "\n\n" + KNOWLEDGE_BASE + "\n\n" +
+                    "Quy tắc trả lời:" +
+                    "1. Nếu câu hỏi liên quan đến WebRTC, Socket, hoặc TCP, hãy ưu tiên sử dụng kiến thức trên." +
+                    "2. Bạn có thể bổ sung thêm kiến thức chung nếu cần thiết." +
+                    "3. Trả lời chi tiết, dễ hiểu, và bằng tiếng Việt." +
+                    "4. Nếu câu hỏi không liên quan đến 3 chủ đề trên, vẫn trả lời bình thường bằng kiến thức của bạn." +
+                    "\n\nCâu hỏi của người dùng: " + userInput;
+        } else {
+            // Nếu không liên quan, trả lời tự do nhưng vẫn có thể tham khảo kho học liệu nếu cần
+            fullPrompt = "Bạn là một trợ lý AI thông minh và hữu ích. " +
+                    "Trả lời câu hỏi của người dùng một cách chi tiết, chính xác và dễ hiểu. " +
+                    "Luôn trả lời bằng tiếng Việt. " +
+                    "\n\nNếu câu hỏi có liên quan đến WebRTC, Socket, hoặc TCP, bạn có thể tham khảo kiến thức sau: " +
+                    "\n\n" + KNOWLEDGE_BASE + "\n\n" +
+                    "Câu hỏi của người dùng: " + userInput;
+        }
 
-        // 2. Tạo Request Body
+        // Tạo Request Body
         GeminiDto.GeminiRequest requestBody = new GeminiDto.GeminiRequest(fullPrompt);
 
-        // 3. Thiết lập Headers
+        // Thiết lập Headers (sử dụng header X-goog-api-key như trong curl example)
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-goog-api-key", geminiApiKey);
 
-        // 4. Gói Request
+        // Gói Request
         HttpEntity<GeminiDto.GeminiRequest> entity = new HttpEntity<>(requestBody, headers);
 
         try {
-            // 5. Gọi API
+            // Gọi API
             GeminiDto.GeminiResponse response = restTemplate.postForObject(geminiUrl, entity, GeminiDto.GeminiResponse.class);
 
-            // 6. Xử lý và trả về kết quả
+            // Xử lý và trả về kết quả
             if (response != null && 
                 response.candidates != null && 
                 !response.candidates.isEmpty() &&
