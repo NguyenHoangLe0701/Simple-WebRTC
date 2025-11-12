@@ -92,12 +92,13 @@ const ChatRoom = () => {
     try {
       console.log(`🗑️ Deleting message: ${messageId} in room ${roomId}`);
       
-      // Optimistic update
+      // Optimistic update (chỉ cho user hiện tại để UX tốt hơn)
+      // Server sẽ broadcast message DELETE về cho TẤT CẢ user, kể cả user này
       setMessages(prev => prev.filter(m => m.id !== messageId));
       
-      // Gửi lệnh xóa qua socket
+      // Gửi lệnh xóa qua socket - Server sẽ broadcast về cho TẤT CẢ user
       await socketService.sendDeleteMessage(roomId, messageId);
-      console.log('✅ Delete message sent successfully');
+      console.log('✅ Delete message sent successfully - Server will broadcast to all users');
       
     } catch (error) {
       console.error('❌ Error deleting message:', error);
@@ -113,14 +114,15 @@ const ChatRoom = () => {
     try {
       console.log(`✏️ Editing message: ${messageId} in room ${roomId}`);
       
-      // Optimistic update
+      // Optimistic update (chỉ cho user hiện tại để UX tốt hơn)
+      // Server sẽ broadcast message EDIT về cho TẤT CẢ user, kể cả user này
       setMessages(prev => prev.map(m => 
         m.id === messageId ? { ...m, content: newContent.trim() } : m
       ));
       
-      // Gửi lệnh chỉnh sửa qua socket
+      // Gửi lệnh chỉnh sửa qua socket - Server sẽ broadcast về cho TẤT CẢ user
       await socketService.sendEditMessage(roomId, messageId, newContent.trim());
-      console.log('✅ Edit message sent successfully');
+      console.log('✅ Edit message sent successfully - Server will broadcast to all users');
       
       setEditingMessageId(null);
       setEditingContent('');
@@ -185,46 +187,225 @@ const ChatRoom = () => {
        chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
         try {
           console.log('💬 ======= RAW MESSAGE RECEIVED =======');
-          console.log('💬 Full message data:', messageData);
+          console.log('💬 Full message data:', JSON.stringify(messageData, null, 2));
           
           if (!messageData) {
             console.warn('💬 Message data is null or undefined');
             return;
           }
           
-          // 🆕 XỬ LÝ CÁC LOẠI MESSAGE TYPE
-          const messageType = messageData.type || 'text';
+          // 🆕 XỬ LÝ CÁC LOẠI MESSAGE TYPE (hỗ trợ cả uppercase và lowercase, object hoặc string)
+          let messageType = 'text';
           
-          if (messageType === 'delete') {
-            // Xử lý message xóa
-            console.log('🗑️ Delete message received:', messageData.id);
-            setMessages(prev => prev.filter(m => m.id !== messageData.id));
-            return;
+          // Parse message type từ nhiều nguồn khác nhau
+          if (messageData.type !== undefined && messageData.type !== null) {
+            if (typeof messageData.type === 'string') {
+              messageType = messageData.type.toLowerCase().trim();
+            } else if (typeof messageData.type === 'object') {
+              // Nếu là object, thử lấy name, value, hoặc toString
+              const typeObj = messageData.type;
+              const typeValue = typeObj.name || typeObj.value || (typeof typeObj.toString === 'function' ? typeObj.toString() : String(typeObj));
+              messageType = String(typeValue).toLowerCase().trim();
+            } else {
+              messageType = String(messageData.type).toLowerCase().trim();
+            }
           }
           
-          if (messageType === 'edit') {
-            // Xử lý message chỉnh sửa
-            console.log('✏️ Edit message received:', messageData.id, messageData.content);
-            setMessages(prev => prev.map(m => 
-              m.id === messageData.id ? { ...m, content: messageData.content } : m
-            ));
+          // FALLBACK: Check dựa trên cấu trúc message nếu type không parse được
+          // DELETE: có id, không có content (hoặc content rỗng), không có sender
+          if ((messageType === 'text' || !messageType) && messageData.id && 
+              (!messageData.content || messageData.content.trim() === '') && 
+              !messageData.sender && !messageData.senderName && !messageData.senderId) {
+            console.log('🔍 [FALLBACK] Detected DELETE message by structure - ID:', messageData.id);
+            messageType = 'delete';
+          }
+          // EDIT: có id, có content, không có sender
+          else if ((messageType === 'text' || !messageType) && messageData.id && 
+                   messageData.content && messageData.content.trim() !== '' && 
+                   !messageData.sender && !messageData.senderName && !messageData.senderId) {
+            console.log('🔍 [FALLBACK] Detected EDIT message by structure - ID:', messageData.id);
+            messageType = 'edit';
+          }
+          // REACTION: có id, có reactions, content là emoji (1-2 ký tự)
+          else if ((messageType === 'text' || !messageType) && messageData.id && 
+                   messageData.reactions && messageData.content && 
+                   messageData.content.length <= 2 && !messageData.sender) {
+            console.log('🔍 [FALLBACK] Detected REACTION message by structure - ID:', messageData.id);
+            messageType = 'reaction';
+          }
+          
+          // Debug log để kiểm tra
+          console.log('🔍 [ALL USERS] Message type parsed:', messageType, 'Original type:', messageData.type, 'Type of:', typeof messageData.type, 'Has sender:', !!messageData.sender);
+          
+          // Xử lý message xóa - TẤT CẢ USER ĐỀU THẤY (KHÔNG THẤY TIN NHẮN ĐÃ XÓA)
+          // Check cả messageType và cấu trúc message
+          const isDeleteMessage = messageType === 'delete' || 
+                                   messageType === 'DELETE' ||
+                                   (messageData.id && 
+                                    (!messageData.content || messageData.content.trim() === '') && 
+                                    !messageData.sender && !messageData.senderName && !messageData.senderId &&
+                                    (messageData.type === 'delete' || messageData.type === 'DELETE' || 
+                                     (typeof messageData.type === 'object' && (messageData.type.name === 'DELETE' || messageData.type.value === 'delete'))));
+          
+          if (isDeleteMessage) {
+            const messageId = messageData.id;
+            if (!messageId) {
+              console.warn('⚠️ Delete message received but no message ID provided');
+              return;
+            }
+            
+            console.log('🗑️ [USER 2] Delete message received from server:', messageId, 'Full data:', JSON.stringify(messageData));
+            setMessages(prev => {
+              const beforeCount = prev.length;
+              const filtered = prev.filter(m => m.id !== messageId);
+              const afterCount = filtered.length;
+              
+              if (beforeCount !== afterCount) {
+                console.log(`🗑️ [USER 2] ✅ Message ${messageId} removed successfully! Before: ${beforeCount}, After: ${afterCount}`);
+              } else {
+                console.log(`ℹ️ [USER 2] Delete message received for ${messageId} but message not found in state`);
+                console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+              }
+              
+              return filtered;
+            });
+            return; // QUAN TRỌNG: return ngay để không xử lý như message thông thường
+          }
+          
+          // Xử lý message chỉnh sửa - TẤT CẢ USER ĐỀU THẤY
+          // Check cả messageType và cấu trúc message
+          const isEditMessage = messageType === 'edit' || 
+                                messageType === 'EDIT' ||
+                                (messageData.id && 
+                                 messageData.content && messageData.content.trim() !== '' && 
+                                 !messageData.sender && !messageData.senderName && !messageData.senderId &&
+                                 (messageData.type === 'edit' || messageData.type === 'EDIT' || 
+                                  (typeof messageData.type === 'object' && (messageData.type.name === 'EDIT' || messageData.type.value === 'edit'))));
+          
+          if (isEditMessage) {
+            const messageId = messageData.id;
+            const newContent = messageData.content;
+            
+            if (!messageId) {
+              console.warn('⚠️ Edit message received but no message ID provided');
+              return;
+            }
+            
+            if (!newContent) {
+              console.warn('⚠️ Edit message received but no content provided');
+              return;
+            }
+            
+            console.log('✏️ [USER 2] Edit message received from server:', messageId, 'New content:', newContent.substring(0, 50) + '...', 'Full data:', JSON.stringify(messageData));
+            setMessages(prev => {
+              const found = prev.find(m => m.id === messageId);
+              if (!found) {
+                console.warn(`⚠️ [USER 2] Edit message received but message ${messageId} not found in state (user may have just joined)`);
+                console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+                return prev; // Không làm gì nếu message không tồn tại
+              }
+              
+              const updated = prev.map(m => {
+                if (m.id === messageId) {
+                  console.log(`✏️ [USER 2] ✅ Updating message ${m.id} with new content: ${newContent}`);
+                  return { ...m, content: newContent };
+                }
+                return m;
+              });
+              
+              return updated;
+            });
+            return;
+          }
+
+          // Xử lý reaction - TẤT CẢ USER ĐỀU THẤY
+          if (messageType === 'reaction' || messageType === 'REACTION') {
+            const messageId = messageData.id;
+            const emoji = messageData.content || messageData.emoji; // Backend gửi emoji trong content
+            const reactions = messageData.reactions;
+            
+            if (!messageId) {
+              console.warn('⚠️ Reaction message received but no message ID provided');
+              return;
+            }
+            
+            if (!emoji) {
+              console.warn('⚠️ Reaction message received but no emoji provided');
+              return;
+            }
+            
+            console.log('😀 [USER 2] Reaction message received from server:', messageId, 'Emoji:', emoji, 'Reactions:', reactions);
+            setMessages(prev => {
+              const found = prev.find(m => m.id === messageId);
+              if (!found) {
+                console.warn(`⚠️ [USER 2] Reaction message received but message ${messageId} not found in state`);
+                console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+                return prev;
+              }
+              
+              const updated = prev.map(m => {
+                if (m.id === messageId) {
+                  console.log(`😀 [USER 2] Updating reactions for message ${m.id} with emoji ${emoji}`);
+                  // Merge reactions: nếu có reactions từ server thì dùng, nếu không thì merge với reactions hiện tại
+                  const currentReactions = m.reactions || {};
+                  const serverReactions = reactions || {};
+                  
+                  // Merge: lấy reactions từ server nếu có, nếu không thì tăng emoji hiện tại
+                  const mergedReactions = { ...currentReactions };
+                  if (serverReactions[emoji]) {
+                    mergedReactions[emoji] = serverReactions[emoji];
+                  } else {
+                    mergedReactions[emoji] = (mergedReactions[emoji] || 0) + 1;
+                  }
+                  
+                  console.log(`😀 [USER 2] Merged reactions:`, mergedReactions);
+                  return { ...m, reactions: mergedReactions };
+                }
+                return m;
+              });
+              
+              return updated;
+            });
             return;
           }
         
     
-    // 🆕 XỬ LÝ ĐÚNG FORMAT TỪ BACKEND
+    // 🆕 XỬ LÝ ĐÚNG FORMAT TỪ BACKEND (chỉ cho message type thông thường, không phải DELETE/EDIT/REACTION)
+    // Chỉ xử lý nếu không phải là các message type đặc biệt
+    if (messageType === 'delete' || messageType === 'edit' || messageType === 'reaction' || 
+        messageType === 'DELETE' || messageType === 'EDIT' || messageType === 'REACTION') {
+      console.warn('⚠️ Special message type should have been handled above:', messageType);
+      return; // Không xử lý như message thông thường
+    }
+    
+    // Xử lý message thông thường (text, code, file, image, etc.)
     const processedMessage = {
       id: messageData.id || `msg_${Date.now()}`,
       sender: messageData.sender || messageData.senderName || 'Unknown',
       senderId: messageData.senderId || messageData.sender,
       content: messageData.content,
       timestamp: messageData.timestamp || new Date().toISOString(),
-      type: messageData.type || 'text',
+      type: typeof messageData.type === 'string' ? messageData.type : (messageData.type?.name || messageData.type?.value || 'text'),
       roomId: messageData.roomId || roomId,
-      avatar: messageData.avatar || (messageData.sender || 'U').charAt(0).toUpperCase()
+      avatar: messageData.avatar || (messageData.sender || 'U').charAt(0).toUpperCase(),
+      fileName: messageData.fileName,
+      fileSize: messageData.fileSize,
+      language: messageData.codeLanguage || messageData.language,
+      replyTo: messageData.replyTo || null, // Thêm replyTo - QUAN TRỌNG: user 2 sẽ thấy reply
+      reactions: messageData.reactions || null // Thêm reactions - QUAN TRỌNG: user 2 sẽ thấy reactions
     };
     
-    console.log('💬 Processed message:', processedMessage);
+    // Log chi tiết để debug
+    if (processedMessage.replyTo) {
+      console.log('💬 [USER 2] Processing message WITH REPLY:', {
+        messageId: processedMessage.id,
+        replyTo: processedMessage.replyTo,
+        sender: processedMessage.sender,
+        content: processedMessage.content
+      });
+    }
+    
+    console.log('💬 [USER 2] Processing normal message - ID:', processedMessage.id, 'replyTo:', processedMessage.replyTo, 'reactions:', processedMessage.reactions);
     
     setMessages(prev => {
       const existingMsg = prev.find(m => m.id === processedMessage.id);
@@ -394,7 +575,7 @@ const ChatRoom = () => {
     };
 
   // SỬA: SEND MESSAGE
-  // sendMessage (Cập nhật để gửi "stop typing")
+  // sendMessage (Cập nhật để gửi "stop typing" và replyTo)
   const sendMessage = async () => {
     if (!newMessage.trim()) return;
     sendStopTypingEvent(); //THÊM MỚI: Dừng gõ khi gửi
@@ -402,7 +583,7 @@ const ChatRoom = () => {
     const senderId = currentUser?.id || currentUser?.userId || currentUser?.username || 'unknown';
     const senderName = currentUser?.fullName || currentUser?.username || 'You';
     
-    //SỬA: GỬI ĐÚNG FORMAT BACKEND MONG ĐỢI
+    //SỬA: GỬI ĐÚNG FORMAT BACKEND MONG ĐỢI (thêm replyTo)
     const message = {
       id: messageId,
       sender: senderName,        
@@ -411,7 +592,13 @@ const ChatRoom = () => {
       type: 'text',              //  QUAN TRỌNG: phải là string 'text'
       roomId: roomId,            //  THÊM roomId
       timestamp: new Date().toISOString(),
-      avatar: senderName.charAt(0).toUpperCase()
+      avatar: senderName.charAt(0).toUpperCase(),
+      replyTo: replyTo ? {  // Thêm replyTo nếu có
+        id: replyTo.id,
+        sender: replyTo.sender,
+        content: replyTo.content,
+        preview: String(replyTo.content).slice(0, 100)
+      } : null
     };
     
     console.log('📤 Sending message to backend:', message);
@@ -669,8 +856,9 @@ const ChatRoom = () => {
           Trả lời
         </button>
         <button 
-          onClick={() => {
+          onClick={async () => {
             const emo = '👍';
+            // Optimistic update
             setMessages(prev => prev.map(m => 
               m.id === message.id ? { 
                 ...m, 
@@ -680,6 +868,15 @@ const ChatRoom = () => {
                 } 
               } : m
             ));
+            
+            // Gửi reaction lên server để broadcast cho tất cả user
+            try {
+              await socketService.sendReaction(roomId, message.id, emo);
+              console.log('✅ Reaction sent successfully');
+            } catch (error) {
+              console.error('❌ Error sending reaction:', error);
+              // Rollback optimistic update nếu cần
+            }
           }} 
           className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
         >
@@ -1199,9 +1396,18 @@ const ChatRoom = () => {
                         {/* KẾt thúc upload file */}
                         <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-0.5 sm:gap-1 flex-wrap opacity-0 group-hover:opacity-100 transition-opacity`}>
                           <button onClick={()=>setReplyTo(message)} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Trả lời</button>
-                          <button onClick={()=>{
+                          <button onClick={async ()=>{
                             const emo='👍';
+                            // Optimistic update
                             setMessages(prev => prev.map(m => m.id===message.id ? { ...m, reactions: { ...m.reactions, [emo]: (m.reactions?.[emo]||0)+1 } } : m));
+                            
+                            // Gửi reaction lên server để broadcast cho tất cả user
+                            try {
+                              await socketService.sendReaction(roomId, message.id, emo);
+                              console.log('✅ Reaction sent successfully');
+                            } catch (error) {
+                              console.error('❌ Error sending reaction:', error);
+                            }
                           }} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Cảm xúc</button>
                           {isOwn && (
                             <>

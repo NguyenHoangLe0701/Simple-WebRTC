@@ -386,6 +386,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -444,6 +445,7 @@ public class ChatMessage {
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
 
+    @JsonProperty("type")
     public MessageType getType() { return type; }
     public void setType(MessageType type) { this.type = type; }
 
@@ -467,7 +469,7 @@ public class ChatMessage {
 
     // Enum MessageType
     public enum MessageType {
-        TEXT, CODE, FILE, IMAGE, VIDEO_CALL, VOICE_CALL, SYSTEM, EDIT, DELETE;
+        TEXT, CODE, FILE, IMAGE, VIDEO_CALL, VOICE_CALL, SYSTEM, EDIT, DELETE, REACTION;
 
         @JsonCreator
         public static MessageType fromValue(String value) {
