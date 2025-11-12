@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import api from '../services/api';
 import { 
   Play, 
   Download, 
   Copy, 
-  Share2, 
-  Settings, 
   Maximize2, 
   Minimize2,
   FileText,
@@ -52,18 +51,91 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
   const handleRunCode = async () => {
     setIsRunning(true);
     setOutput('Đang chạy code...\n');
-    
-    // Simulate code execution
-    setTimeout(() => {
-      setOutput(prev => prev + `Code ${language} đã chạy thành công!\n`);
+
+    try {
+      let result;
+
+      if (language === 'python') {
+        result = await executePythonCode(code);
+      } else {
+        // Giả lập thực thi cho ngôn ngữ khác
+        setTimeout(() => {
+          setOutput(prev => prev + `Code ${language} đã chạy thành công!\n(Lưu ý: Chỉ Python được hỗ trợ thực thi thật)\n`);
+          setIsRunning(false);
+        }, 2000);
+        return;
+      }
+
+      if (result.success) {
+        setOutput(prev => prev + `Kết quả:\n${result.output}\n`);
+      } else {
+        setOutput(prev => prev + `Lỗi:\n${result.error}\n`);
+      }
+    } catch (error) {
+      setOutput(prev => prev + `Lỗi kết nối: ${error.message}\n`);
+    } finally {
       setIsRunning(false);
-    }, 2000);
+    }
+  };
+
+  const executePythonCode = async (code) => {
+    try {
+      const res = await api.post(`/api/code/execute/python`, {
+        code,
+        language: 'python',
+        fileName
+      });
+      return res.data;
+    } catch (err) {
+      console.error('Error executing Python code:', err);
+      return {
+        output: '',
+        error: `Không thể kết nối đến server: ${err.message}`,
+        success: false
+      };
+    }
+  };
+
+  const handleSaveFile = async () => {
+    try {
+      const res = await api.post(`/code/save`, {
+        fileName,
+        content: code
+      });
+      const result = res.data;
+      if (result.success) {
+        setOutput(prev => prev + `File đã được lưu thành công: ${result.message}\n`);
+      } else {
+        setOutput(prev => prev + `Lỗi khi lưu file: ${result.message}\n`);
+      }
+    } catch (err) {
+      setOutput(prev => prev + `Lỗi kết nối khi lưu file: ${err.message}\n`);
+    }
+  };
+
+  const handleLoadFile = async () => {
+    const filePath = prompt('Nhập đường dẫn file (ví dụ: uploads/code/code.py):');
+    if (filePath) {
+      try {
+        const res = await api.get(`/code/load`, {
+          params: { filePath }
+        });
+        const result = res.data;
+        if (result.success) {
+          setCode(result.content);
+          setOutput(prev => prev + `File đã được tải thành công!\n`);
+        } else {
+          setOutput(prev => prev + `Lỗi tải file: ${result.message}\n`);
+        }
+      } catch (err) {
+        setOutput(prev => prev + `Lỗi kết nối khi tải file: ${err.message}\n`);
+      }
+    }
   };
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(code);
-    // Show toast notification
-    console.log('Code copied to clipboard');
+    setOutput(prev => prev + 'Code đã được copy vào clipboard!\n');
   };
 
   const handleDownloadCode = () => {
@@ -76,14 +148,15 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    setOutput(prev => prev + `File ${fileName} đã được tải về!\n`);
   };
 
   const handleSendCode = () => {
     if (onSendCode) {
       onSendCode({
         content: code,
-        language: language,
-        fileName: fileName
+        language,
+        fileName
       });
     }
     onClose();
@@ -96,24 +169,15 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
       const end = e.target.selectionEnd;
       const newCode = code.substring(0, start) + '  ' + code.substring(end);
       setCode(newCode);
-      
-      // Set cursor position after the inserted spaces
+
       setTimeout(() => {
         e.target.selectionStart = e.target.selectionEnd = start + 2;
       }, 0);
     }
   };
 
-  const getSyntaxHighlighting = (code, lang) => {
-    // Simple syntax highlighting (in a real app, you'd use a proper library like Prism.js)
-    if (lang === 'javascript') {
-      return code
-        .replace(/\b(function|const|let|var|if|else|for|while|return|class|import|export)\b/g, '<span class="text-blue-600 font-semibold">$1</span>')
-        .replace(/\b(true|false|null|undefined)\b/g, '<span class="text-purple-600">$1</span>')
-        .replace(/"([^"]*)"/g, '<span class="text-green-600">"$1"</span>')
-        .replace(/\/\/.*$/gm, '<span class="text-gray-500">$&</span>');
-    }
-    return code;
+  const clearOutput = () => {
+    setOutput('');
   };
 
   if (!isOpen) return null;
@@ -145,7 +209,7 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
               ))}
             </select>
           </div>
-          
+
           <div className="flex items-center space-x-2">
             <button
               onClick={handleRunCode}
@@ -155,58 +219,47 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
               <Play className="h-4 w-4" />
               <span>{isRunning ? 'Running...' : 'Run'}</span>
             </button>
-            <button
-              onClick={handleCopyCode}
-              className="p-2 text-gray-500 hover:text-gray-700"
-            >
+            <button onClick={handleSaveFile} className="p-2 text-gray-500 hover:text-gray-700" title="Save to Server">
+              <Save className="h-4 w-4" />
+            </button>
+            <button onClick={handleLoadFile} className="p-2 text-gray-500 hover:text-gray-700" title="Load from Server">
+              <FolderOpen className="h-4 w-4" />
+            </button>
+            <button onClick={handleCopyCode} className="p-2 text-gray-500 hover:text-gray-700">
               <Copy className="h-4 w-4" />
             </button>
-            <button
-              onClick={handleDownloadCode}
-              className="p-2 text-gray-500 hover:text-gray-700"
-            >
+            <button onClick={handleDownloadCode} className="p-2 text-gray-500 hover:text-gray-700">
               <Download className="h-4 w-4" />
             </button>
-            <button
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-2 text-gray-500 hover:text-gray-700"
-            >
+            <button onClick={() => setIsFullscreen(!isFullscreen)} className="p-2 text-gray-500 hover:text-gray-700">
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
+            <button onClick={onClose} className="p-2 text-gray-500 hover:text-gray-700">✕</button>
           </div>
         </div>
 
-        {/* Editor and Output */}
+        {/* Body */}
         <div className="flex-1 flex">
-          {/* Code Editor */}
           <div className="flex-1 flex flex-col">
-            <div className="flex-1 relative">
-              <textarea
-                ref={textareaRef}
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={`Nhập code ${language} của bạn...`}
-                className="w-full h-full p-4 font-mono text-sm border-none outline-none resize-none"
-                style={{ lineHeight: '1.5' }}
-              />
-            </div>
+            <textarea
+              ref={textareaRef}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={`Nhập code ${language} của bạn...`}
+              className="w-full h-full p-4 font-mono text-sm border-none outline-none resize-none"
+              style={{ lineHeight: '1.5' }}
+            />
           </div>
 
-          {/* Output Panel */}
           <div className="w-1/3 border-l border-gray-200 flex flex-col">
-            <div className="p-3 border-b border-gray-200 bg-gray-50">
+            <div className="flex justify-between items-center p-3 border-b border-gray-200 bg-gray-50">
               <h4 className="text-sm font-semibold text-gray-700">Output</h4>
+              <button onClick={clearOutput} className="text-xs text-gray-500 hover:text-gray-700">Clear</button>
             </div>
-            <div className="flex-1 p-3">
+            <div className="flex-1 p-3 overflow-auto">
               <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono">
-                {output || 'Output sẽ hiển thị ở đây...'}
+                {output || 'Output sẽ hiển thị ở đây...\nChọn ngôn ngữ Python để thực thi code thật.'}
               </pre>
             </div>
           </div>
@@ -220,19 +273,15 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
             <span>Characters: {code.length}</span>
             <span>•</span>
             <span>{language.toUpperCase()}</span>
+            <span>•</span>
+            <span className={language === 'python' ? 'text-green-600 font-semibold' : 'text-orange-500'}>
+              {language === 'python' ? 'Real Execution' : 'Simulation Only'}
+            </span>
           </div>
-          
+
           <div className="flex items-center space-x-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800"
-            >
-              Hủy
-            </button>
-            <button
-              onClick={handleSendCode}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-            >
+            <button onClick={onClose} className="px-4 py-2 text-gray-600 hover:text-gray-800">Hủy</button>
+            <button onClick={handleSendCode} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
               Gửi Code
             </button>
           </div>
