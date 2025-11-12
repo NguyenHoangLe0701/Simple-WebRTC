@@ -3,10 +3,12 @@ package com.smartchat.chatfacetimesmartdev;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 
 @SpringBootApplication(scanBasePackages = {"com.smartchat.chatfacetimesmartdev"})
+@EnableScheduling
 public class ChatfacetimesmartdevApplication {
 
 	@Bean
