@@ -21,7 +21,7 @@ public interface RoomRepository extends JpaRepository<Room, Long> {
     
     List<Room> findByIsPrivateFalse();
     
-    @Query("SELECT r FROM Room r WHERE r.hostId = :hostId OR :userId MEMBER OF r.participants")
+    @Query("SELECT r FROM Room r WHERE r.hostId = :hostId OR EXISTS (SELECT a FROM r.approvedUsers a WHERE a.userId = :userId)")
     List<Room> findRoomsByUser(@Param("hostId") String hostId, @Param("userId") String userId);
     
     @Query("SELECT r FROM Room r WHERE r.name LIKE %:name% OR r.description LIKE %:description%")

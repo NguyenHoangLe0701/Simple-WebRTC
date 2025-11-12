@@ -397,7 +397,15 @@ console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
     
     await this.send(`/app/chat/${roomId}`, chatMessage);
   }
+  async sendDeleteMessage(roomId, messageId) {
+    console.log(`SocketService: Gửi lệnh xóa cho message ${messageId} tới phòng ${roomId}`);
+    await this.send(`/app/chat/${roomId}/delete`, { id: messageId });
+  }
 
+  async sendEditMessage(roomId, messageId, newContent) {
+    console.log(`SocketService: Gửi lệnh sửa cho message ${messageId} tới phòng ${roomId}`);
+    await this.send(`/app/chat/${roomId}/edit`, { id: messageId, content: newContent });
+  }
   async subscribeToChat(roomId, callback) {
     return await this.subscribe(`/topic/chat/${roomId}`, callback);
   }
