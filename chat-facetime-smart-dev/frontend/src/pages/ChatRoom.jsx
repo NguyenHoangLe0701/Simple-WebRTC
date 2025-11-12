@@ -22,6 +22,7 @@ import {
   Bot,
   LogOut,
   Copy,
+  Edit3, Trash2,
   Check
 } from 'lucide-react';
 import AIAssistant from '../components/AIAssistant';
@@ -81,6 +82,63 @@ const ChatRoom = () => {
   const fileInputRef = useRef(null);
   const dropRef = useRef(null);
 
+  const handleDeleteMessage = async (messageId) => {
+    if (!messageId) return;
+    
+    try {
+      console.log(`🗑️ Deleting message: ${messageId} in room ${roomId}`);
+      
+      // Optimistic update
+      setMessages(prev => prev.filter(m => m.id !== messageId));
+      
+      // Gửi lệnh xóa qua socket
+      await socketService.sendDeleteMessage(roomId, messageId);
+      console.log('✅ Delete message sent successfully');
+      
+    } catch (error) {
+      console.error('❌ Error deleting message:', error);
+      // Rollback optimistic update nếu cần
+      // Có thể reload messages từ server ở đây
+    }
+  };
+
+  // 🆕 THÊM: Hàm xử lý chỉnh sửa tin nhắn
+  const handleEditMessage = async (messageId, newContent) => {
+    if (!messageId || !newContent.trim()) return;
+    
+    try {
+      console.log(`✏️ Editing message: ${messageId} in room ${roomId}`);
+      
+      // Optimistic update
+      setMessages(prev => prev.map(m => 
+        m.id === messageId ? { ...m, content: newContent.trim() } : m
+      ));
+      
+      // Gửi lệnh chỉnh sửa qua socket
+      await socketService.sendEditMessage(roomId, messageId, newContent.trim());
+      console.log('✅ Edit message sent successfully');
+      
+      setEditingMessageId(null);
+      setEditingContent('');
+      
+    } catch (error) {
+      console.error('❌ Error editing message:', error);
+      // Rollback optimistic update nếu cần
+    }
+  };
+
+  // 🆕 THÊM: Hàm bắt đầu chỉnh sửa
+  const startEditing = (message) => {
+    setEditingMessageId(message.id);
+    setEditingContent(message.content);
+  };
+
+  // 🆕 THÊM: Hàm hủy chỉnh sửa
+  const cancelEditing = () => {
+    setEditingMessageId(null);
+    setEditingContent('');
+  };
+
   // 🆕 THÊM DEBUG EFFECTS
   useEffect(() => {
     console.log('🔍 Current user:', currentUser);
@@ -118,17 +176,37 @@ const ChatRoom = () => {
         setConnectionStatus('connected');
         console.log('✅ Socket connected, setting up subscriptions...');
         
-        // 🆕 SỬA: XỬ LÝ MESSAGE ĐÚNG CÁCH
-       // 🆕 SỬA: XỬ LÝ MESSAGE NHẬN ĐƯỢC ĐÚNG CÁCH
-chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
-  try {
-    console.log('💬 ======= RAW MESSAGE RECEIVED =======');
-    console.log('💬 Full message data:', messageData);
-    
-    if (!messageData) {
-      console.warn('💬 Message data is null or undefined');
-      return;
-    }
+        // 
+       //  SỬA: XỬ LÝ MESSAGE NHẬN ĐƯỢC ĐÚNG CÁCH
+       chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
+        try {
+          console.log('💬 ======= RAW MESSAGE RECEIVED =======');
+          console.log('💬 Full message data:', messageData);
+          
+          if (!messageData) {
+            console.warn('💬 Message data is null or undefined');
+            return;
+          }
+          
+          // 🆕 XỬ LÝ CÁC LOẠI MESSAGE TYPE
+          const messageType = messageData.type || 'text';
+          
+          if (messageType === 'delete') {
+            // Xử lý message xóa
+            console.log('🗑️ Delete message received:', messageData.id);
+            setMessages(prev => prev.filter(m => m.id !== messageData.id));
+            return;
+          }
+          
+          if (messageType === 'edit') {
+            // Xử lý message chỉnh sửa
+            console.log('✏️ Edit message received:', messageData.id, messageData.content);
+            setMessages(prev => prev.map(m => 
+              m.id === messageData.id ? { ...m, content: messageData.content } : m
+            ));
+            return;
+          }
+        
     
     // 🆕 XỬ LÝ ĐÚNG FORMAT TỪ BACKEND
     const processedMessage = {
@@ -383,7 +461,7 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
     }
   };
 
- // 🆕 SỬA: HANDLE FILE UPLOAD (ĐÃ THAY THẾ)
+ //  SỬA: HANDLE FILE UPLOAD (ĐÃ THAY THẾ)
    const handleFileUpload = async (event) => {
       const file = event.target.files[0];
       if (!file) return;
@@ -557,7 +635,207 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
     navigate(`/chat/${code}`);
     setJoinRoomCode('');
   };
+   
+  const renderMessageActions = (message, isOwn) => {
+    if (editingMessageId === message.id) {
+      return (
+        <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-100 transition-opacity`}>
+          <button 
+            onClick={() => handleEditMessage(message.id, editingContent)}
+            className="text-xs px-2 py-1 rounded bg-green-100 hover:bg-green-200 text-green-700"
+          >
+            Lưu
+          </button>
+          <button 
+            onClick={cancelEditing}
+            className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+          >
+            Hủy
+          </button>
+        </div>
+      );
+    }
 
+    return (
+      <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
+        <button 
+          onClick={() => setReplyTo(message)} 
+          className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
+        >
+          Trả lời
+        </button>
+        <button 
+          onClick={() => {
+            const emo = '👍';
+            setMessages(prev => prev.map(m => 
+              m.id === message.id ? { 
+                ...m, 
+                reactions: { 
+                  ...m.reactions, 
+                  [emo]: (m.reactions?.[emo] || 0) + 1 
+                } 
+              } : m
+            ));
+          }} 
+          className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
+        >
+          Cảm xúc
+        </button>
+        {isOwn && (
+          <>
+            <button 
+              onClick={() => startEditing(message)} 
+              className="text-xs px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1"
+            >
+              <Edit3 className="h-3 w-3" />
+              Sửa
+            </button>
+            <button 
+              onClick={() => handleDeleteMessage(message.id)} 
+              className="text-xs px-2 py-1 rounded bg-red-100 hover:bg-red-200 text-red-700 flex items-center gap-1"
+            >
+              <Trash2 className="h-3 w-3" />
+              Xóa
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // 🆕 CẬP NHẬT: Phần render message content
+  const renderMessageContent = (message, isOwn) => {
+    if (editingMessageId === message.id) {
+      return (
+        <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'} w-full`}>
+          <input
+            className={`w-full bg-transparent outline-none ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
+            value={editingContent}
+            onChange={(e) => setEditingContent(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleEditMessage(message.id, editingContent);
+              } else if (e.key === 'Escape') {
+                cancelEditing();
+              }
+            }}
+            autoFocus
+          />
+        </div>
+      );
+    }
+
+    switch (message.type) {
+      case 'text':
+        return (
+          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+            {message.replyTo && (
+              <div className="text-xs opacity-80 mb-1 border-l-2 pl-2">
+                Trả lời {message.replyTo.sender}: {message.replyTo.preview}
+              </div>
+            )}
+            <span>{message.content}</span>
+            {message.reactions && Object.keys(message.reactions).length > 0 && (
+              <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs`}>
+                {Object.entries(message.reactions).map(([emo, count]) => (
+                  <span key={emo} className="px-2 py-0.5 rounded-full bg-black/10">
+                    {emo} {count}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'code':
+        return (
+          <div className="bg-gray-100 rounded-lg p-3 mt-2 text-left">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-medium text-gray-600">{message.language || 'code'}</span>
+                {message.fileName && (<span className="text-xs text-gray-500">({message.fileName})</span>)}
+              </div>
+              <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button className="text-xs text-blue-600 hover:text-blue-800 p-1">
+                  <Download className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+            <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 p-2 rounded border">{message.content}</pre>
+          </div>
+        );
+
+      case 'file':
+        return (
+          <a 
+            href={message.content}
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="bg-gray-100 rounded-lg p-3 mt-2 flex items-center space-x-3 hover:bg-gray-200"
+            download={message.fileName}
+          >
+            <FileText className="h-8 w-8 text-blue-500" />
+            <div className="flex-1">
+              <p className="font-medium text-sm text-gray-900">{message.fileName}</p>
+              {message.fileSize && (
+                <p className="text-xs text-gray-500">{(message.fileSize / 1024).toFixed(1)} KB</p>
+              )}
+            </div>
+            <Download className="h-4 w-4 text-gray-600" />
+          </a>
+        );
+
+      case 'image':
+        return (
+          <img 
+            src={message.content}
+            alt={message.fileName || 'Hình ảnh'}
+            className="max-w-xs rounded-lg object-cover cursor-pointer mt-2" 
+            onClick={() => window.open(message.content, '_blank')}
+          />
+        );
+
+      default:
+        return (
+          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+            <span>{message.content}</span>
+          </div>
+        );
+    }
+  };
+
+  // 🆕 CẬP NHẬT: Phần render message item
+  const renderMessageItem = (index, message) => {
+    const isOwn = (currentUser?.id || currentUser?.username) === (message.senderId || message.sender) ||
+                 (currentUser?.fullName || currentUser?.username || 'You') === message.sender;
+
+    return (
+      <div className="px-4 py-2 group">
+        <div className={`flex items-end ${isOwn ? 'justify-end' : 'justify-start'}`}>
+          {!isOwn && (
+            <div className="mr-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+              {message.avatar}
+            </div>
+          )}
+          <div className={`max-w-[72%] ${isOwn ? 'text-right' : 'text-left'}`}>
+            <div className={`mb-1 flex items-center gap-2 text-xs ${isOwn ? 'justify-end' : 'justify-start'} text-gray-500`}>
+              {!isOwn && <span className="font-medium text-gray-700">{message.sender}</span>}
+              <span>{formatTime(message.timestamp)}</span>
+            </div>
+            
+            {renderMessageContent(message, isOwn)}
+            {renderMessageActions(message, isOwn)}
+            
+          </div>
+          {isOwn && (
+            <div className="ml-2 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+              {message.avatar}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       {/* Sidebar (channels/users) */}
@@ -816,35 +1094,35 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
                                 Trả lời {message.replyTo.sender}: {message.replyTo.preview}
                               </div>
                             )}
-                            {editingMessageId === message.id ? (
-                              <input
-                                className={`w-full bg-transparent outline-none ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
-                                value={editingContent}
-                                onChange={(e)=>setEditingContent(e.target.value)}
-                                onKeyDown={(e)=>{
-                                  if(e.key==='Enter'){
-                                    setMessages(prev => prev.map(m => m.id===message.id ? { ...m, content: editingContent } : m));
-                                    setEditingMessageId(null);
-                                  } else if (e.key==='Escape') {
-                                    setEditingMessageId(null);
-                                  }
-                                }}
-                                autoFocus
-                              />
-                            ) : (
-                              <span>{message.content}</span>
-                            )}
-                            {message.reactions && Object.keys(message.reactions).length>0 && (
-                              <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs`}>
-                                {Object.entries(message.reactions).map(([emo, count]) => (
-                                  <span key={emo} className="px-2 py-0.5 rounded-full bg-black/10">
-                                    {emo} {count}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
+                             {editingMessageId === message.id ? (
+      <input
+        className={`w-full bg-transparent outline-none ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
+        value={editingContent}
+        onChange={(e) => setEditingContent(e.target.value)}
+        onKeyDown={(e) => {
+          if(e.key === 'Enter') {
+            handleEditMessage(message.id, editingContent);
+          } else if (e.key === 'Escape') {
+            setEditingMessageId(null);
+          }
+        }}
+        autoFocus
+      />
+    ) : (
+      <span>{message.content}</span>
+    )}
+    
+    {message.reactions && Object.keys(message.reactions).length>0 && (
+      <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs`}>
+        {Object.entries(message.reactions).map(([emo, count]) => (
+          <span key={emo} className="px-2 py-0.5 rounded-full bg-black/10">
+            {emo} {count}
+          </span>
+        ))}
+      </div>
+    )}
+  </div>
+)}
                         {message.type === 'code' && (
                           <div className="bg-gray-100 rounded-lg p-3 mt-2 text-left">
                             <div className="flex items-center justify-between mb-2">
@@ -1028,7 +1306,7 @@ chatSub = await socketService.subscribeToChat(roomId, (messageData) => {
           />
         </div>
         {/* // =============================================
-          // ⬆️ === KẾT THÚC PHẦN CẬP NHẬT === ⬆️
+          // ⬆ === KẾT THÚC PHẦN CẬP NHẬT === ⬆
           // =============================================
         */}
       </div>

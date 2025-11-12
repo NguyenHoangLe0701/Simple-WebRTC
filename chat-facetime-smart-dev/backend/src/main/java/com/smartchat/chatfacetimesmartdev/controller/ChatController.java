@@ -74,6 +74,45 @@ public class ChatController {
             e.printStackTrace();
         }
     }
+    // 🆕 === 2. XỬ LÝ XÓA TIN NHẮN ===
+    @MessageMapping("/chat/{roomId}/delete")
+    public void deleteMessage(@DestinationVariable String roomId, @Payload Map<String, String> payload) {
+        try {
+            String messageId = payload.get("id");
+            System.out.println("🗑️ Deleting message: " + messageId + " in room " + roomId);
+
+            // Tạo một message đặc biệt loại DELETE để báo cho client
+            ChatMessage deleteNotification = new ChatMessage();
+            deleteNotification.setId(messageId); // ID của tin nhắn cần xóa
+            deleteNotification.setRoomId(roomId);
+            deleteNotification.setType(ChatMessage.MessageType.DELETE);
+            
+            // Gửi cho tất cả mọi người trong phòng
+            messagingTemplate.convertAndSend("/topic/chat/" + roomId, deleteNotification);
+        } catch (Exception e) {
+            System.err.println("❌ Error deleting message: " + e.getMessage());
+        }
+    }
+    @MessageMapping("/chat/{roomId}/edit")
+    public void editMessage(@DestinationVariable String roomId, @Payload Map<String, String> payload) {
+        try {
+            String messageId = payload.get("id");
+            String newContent = payload.get("content");
+            System.out.println("✏️ Editing message: " + messageId + " in room " + roomId);
+
+            // Tạo một message đặc biệt loại EDIT
+            ChatMessage editNotification = new ChatMessage();
+            editNotification.setId(messageId); // ID của tin nhắn cần sửa
+            editNotification.setRoomId(roomId);
+            editNotification.setContent(newContent); // Nội dung mới
+            editNotification.setType(ChatMessage.MessageType.EDIT);
+            
+            // Gửi cho tất cả mọi người
+            messagingTemplate.convertAndSend("/topic/chat/" + roomId, editNotification);
+        } catch (Exception e) {
+            System.err.println("❌ Error editing message: " + e.getMessage());
+        }
+    }
 
     // === HELPER METHOD ===
     private String getStringSafe(Map<String, Object> map, String key) {
