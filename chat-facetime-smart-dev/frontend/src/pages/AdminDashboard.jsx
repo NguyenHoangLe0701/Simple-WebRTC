@@ -50,6 +50,7 @@ import {
   TrendingUp as Growth
 } from 'lucide-react';
 import api from '../services/api';
+import UsersComponent from './admin/Users';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -851,8 +852,13 @@ const AdminDashboard = () => {
             </div>
           )}
 
+          {/* Users Tab */}
+          {activeTab === 'users' && (
+            <UsersComponent />
+          )}
+
           {/* Other tabs */}
-          {activeTab !== 'overview' && activeTab !== 'database' && activeTab !== 'rooms' && (
+          {activeTab !== 'overview' && activeTab !== 'database' && activeTab !== 'rooms' && activeTab !== 'users' && (
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <div className="text-center">
                 <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">

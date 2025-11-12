@@ -9,9 +9,11 @@ import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +29,9 @@ public class AdminController {
     
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private PasswordEncoder passwordEncoder;
     
     @GetMapping("/dashboard")
     public ResponseEntity<?> getDashboardStats() {
@@ -126,6 +131,124 @@ public class AdminController {
             }
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Lỗi khi cập nhật quyền"));
+        }
+    }
+    
+    @PostMapping("/users")
+    public ResponseEntity<?> createUser(@RequestBody Map<String, Object> userData) {
+        try {
+            String username = (String) userData.get("username");
+            String email = (String) userData.get("email");
+            String password = (String) userData.get("password");
+            String fullName = (String) userData.get("fullName");
+            String roleStr = (String) userData.get("role");
+            Boolean active = userData.get("active") != null ? (Boolean) userData.get("active") : true;
+            
+            // Validation
+            if (username == null || username.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Username không được để trống"));
+            }
+            if (email == null || email.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Email không được để trống"));
+            }
+            if (password == null || password.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Password không được để trống"));
+            }
+            
+            // Kiểm tra username đã tồn tại
+            if (userRepository.existsByUsername(username)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Username đã tồn tại"));
+            }
+            
+            // Kiểm tra email đã tồn tại
+            if (userRepository.existsByEmail(email)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Email đã tồn tại"));
+            }
+            
+            // Tạo user mới
+            User user = new User();
+            user.setUsername(username.trim());
+            user.setEmail(email.trim());
+            user.setPassword(passwordEncoder.encode(password));
+            user.setFullName(fullName != null ? fullName.trim() : "");
+            user.setRole(roleStr != null && "ADMIN".equals(roleStr) ? User.Role.ADMIN : User.Role.USER);
+            user.setActive(active);
+            user.setCreatedAt(LocalDateTime.now());
+            user.setUpdatedAt(LocalDateTime.now());
+            
+            User savedUser = userRepository.save(user);
+            return ResponseEntity.ok(savedUser);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "Lỗi khi tạo người dùng: " + e.getMessage()));
+        }
+    }
+    
+    @PutMapping("/users/{id}")
+    public ResponseEntity<?> updateUser(@PathVariable Long id, @RequestBody Map<String, Object> userData) {
+        try {
+            Optional<User> userOpt = userRepository.findById(id);
+            if (!userOpt.isPresent()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            User user = userOpt.get();
+            
+            // Cập nhật username nếu có và khác với username hiện tại
+            if (userData.containsKey("username")) {
+                String username = (String) userData.get("username");
+                if (username != null && !username.trim().isEmpty()) {
+                    if (!username.trim().equals(user.getUsername()) && userRepository.existsByUsername(username.trim())) {
+                        return ResponseEntity.badRequest().body(Map.of("error", "Username đã tồn tại"));
+                    }
+                    user.setUsername(username.trim());
+                }
+            }
+            
+            // Cập nhật email nếu có và khác với email hiện tại
+            if (userData.containsKey("email")) {
+                String email = (String) userData.get("email");
+                if (email != null && !email.trim().isEmpty()) {
+                    if (!email.trim().equals(user.getEmail()) && userRepository.existsByEmail(email.trim())) {
+                        return ResponseEntity.badRequest().body(Map.of("error", "Email đã tồn tại"));
+                    }
+                    user.setEmail(email.trim());
+                }
+            }
+            
+            // Cập nhật password nếu có
+            if (userData.containsKey("password") && userData.get("password") != null) {
+                String password = (String) userData.get("password");
+                if (!password.isEmpty()) {
+                    user.setPassword(passwordEncoder.encode(password));
+                }
+            }
+            
+            // Cập nhật fullName
+            if (userData.containsKey("fullName")) {
+                String fullName = (String) userData.get("fullName");
+                user.setFullName(fullName != null ? fullName.trim() : "");
+            }
+            
+            // Cập nhật role
+            if (userData.containsKey("role")) {
+                String roleStr = (String) userData.get("role");
+                if ("ADMIN".equals(roleStr) || "USER".equals(roleStr)) {
+                    user.setRole(User.Role.valueOf(roleStr));
+                }
+            }
+            
+            // Cập nhật active
+            if (userData.containsKey("active")) {
+                user.setActive((Boolean) userData.get("active"));
+            }
+            
+            user.setUpdatedAt(LocalDateTime.now());
+            User updatedUser = userRepository.save(user);
+            return ResponseEntity.ok(updatedUser);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "Lỗi khi cập nhật người dùng: " + e.getMessage()));
         }
     }
 }
