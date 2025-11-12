@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import api from '../services/api';
 import { 
   Play, 
   Download, 
@@ -10,6 +9,7 @@ import {
   Save,
   FolderOpen
 } from 'lucide-react';
+import codeExecutionService from '../services/codeExecutionService';
 
 const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLanguage = 'javascript' }) => {
   const [code, setCode] = useState(initialCode);
@@ -50,66 +50,46 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
 
   const handleRunCode = async () => {
     setIsRunning(true);
-    setOutput('Đang chạy code...\n');
+    setOutput('🔄 Đang chạy code...\n');
 
     try {
       let result;
 
-      if (language === 'python') {
-        result = await executePythonCode(code);
+      // Sử dụng service mới để thực thi code
+      if (language === 'html' || language === 'css' || language === 'json') {
+        // HTML, CSS, JSON chỉ cần trả về code
+        result = {
+          output: code,
+          error: '',
+          success: true
+        };
       } else {
-        // Giả lập thực thi cho ngôn ngữ khác
-        setTimeout(() => {
-          setOutput(prev => prev + `Code ${language} đã chạy thành công!\n(Lưu ý: Chỉ Python được hỗ trợ thực thi thật)\n`);
-          setIsRunning(false);
-        }, 2000);
-        return;
+        // Các ngôn ngữ thực thi được
+        result = await codeExecutionService.executeCode(code, language, fileName);
       }
 
-      if (result.success) {
-        setOutput(prev => prev + `Kết quả:\n${result.output}\n`);
+      if (result.data.success) {
+        setOutput(prev => prev + `✅ Thực thi thành công!\n\n📤 Kết quả:\n${result.data.output}\n`);
       } else {
-        setOutput(prev => prev + `Lỗi:\n${result.error}\n`);
+        setOutput(prev => prev + `❌ Lỗi thực thi:\n${result.data.error}\n`);
       }
     } catch (error) {
-      setOutput(prev => prev + `Lỗi kết nối: ${error.message}\n`);
+      setOutput(prev => prev + `❌ Lỗi kết nối: ${error.message}\n`);
     } finally {
       setIsRunning(false);
     }
   };
 
-  const executePythonCode = async (code) => {
-    try {
-      const res = await api.post(`/api/code/execute/python`, {
-        code,
-        language: 'python',
-        fileName
-      });
-      return res.data;
-    } catch (err) {
-      console.error('Error executing Python code:', err);
-      return {
-        output: '',
-        error: `Không thể kết nối đến server: ${err.message}`,
-        success: false
-      };
-    }
-  };
-
   const handleSaveFile = async () => {
     try {
-      const res = await api.post(`/code/save`, {
-        fileName,
-        content: code
-      });
-      const result = res.data;
-      if (result.success) {
-        setOutput(prev => prev + `File đã được lưu thành công: ${result.message}\n`);
+      const result = await codeExecutionService.saveFile(fileName, code);
+      if (result.data.success) {
+        setOutput(prev => prev + `💾 File đã được lưu thành công: ${result.data.message}\n`);
       } else {
-        setOutput(prev => prev + `Lỗi khi lưu file: ${result.message}\n`);
+        setOutput(prev => prev + `❌ Lỗi khi lưu file: ${result.data.message}\n`);
       }
     } catch (err) {
-      setOutput(prev => prev + `Lỗi kết nối khi lưu file: ${err.message}\n`);
+      setOutput(prev => prev + `❌ Lỗi kết nối khi lưu file: ${err.message}\n`);
     }
   };
 
@@ -117,25 +97,22 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
     const filePath = prompt('Nhập đường dẫn file (ví dụ: uploads/code/code.py):');
     if (filePath) {
       try {
-        const res = await api.get(`/code/load`, {
-          params: { filePath }
-        });
-        const result = res.data;
-        if (result.success) {
-          setCode(result.content);
-          setOutput(prev => prev + `File đã được tải thành công!\n`);
+        const result = await codeExecutionService.loadFile(filePath);
+        if (result.data.success) {
+          setCode(result.data.content);
+          setOutput(prev => prev + `📂 File đã được tải thành công!\n`);
         } else {
-          setOutput(prev => prev + `Lỗi tải file: ${result.message}\n`);
+          setOutput(prev => prev + `❌ Lỗi tải file: ${result.data.message}\n`);
         }
       } catch (err) {
-        setOutput(prev => prev + `Lỗi kết nối khi tải file: ${err.message}\n`);
+        setOutput(prev => prev + `❌ Lỗi kết nối khi tải file: ${err.message}\n`);
       }
     }
   };
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(code);
-    setOutput(prev => prev + 'Code đã được copy vào clipboard!\n');
+    setOutput(prev => prev + '📋 Code đã được copy vào clipboard!\n');
   };
 
   const handleDownloadCode = () => {
@@ -148,7 +125,7 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setOutput(prev => prev + `File ${fileName} đã được tải về!\n`);
+    setOutput(prev => prev + `📥 File ${fileName} đã được tải về!\n`);
   };
 
   const handleSendCode = () => {
@@ -179,6 +156,16 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
   const clearOutput = () => {
     setOutput('');
   };
+
+  // Hàm kiểm tra trạng thái thực thi
+  const getExecutionStatus = () => {
+    if (language === 'html' || language === 'css' || language === 'json') {
+      return { text: 'Preview Only', color: 'text-blue-600' };
+    }
+    return { text: 'Real Execution', color: 'text-green-600' };
+  };
+
+  const executionStatus = getExecutionStatus();
 
   if (!isOpen) return null;
 
@@ -259,7 +246,7 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
             </div>
             <div className="flex-1 p-3 overflow-auto">
               <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono">
-                {output || 'Output sẽ hiển thị ở đây...\nChọn ngôn ngữ Python để thực thi code thật.'}
+                {output || `Output sẽ hiển thị ở đây...\n\n📝 Ngôn ngữ: ${language.toUpperCase()}\n🚀 Trạng thái: ${executionStatus.text}\n\nChọn "Run" để thực thi code.`}
               </pre>
             </div>
           </div>
@@ -274,8 +261,8 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
             <span>•</span>
             <span>{language.toUpperCase()}</span>
             <span>•</span>
-            <span className={language === 'python' ? 'text-green-600 font-semibold' : 'text-orange-500'}>
-              {language === 'python' ? 'Real Execution' : 'Simulation Only'}
+            <span className={`${executionStatus.color} font-semibold`}>
+              {executionStatus.text}
             </span>
           </div>
 
