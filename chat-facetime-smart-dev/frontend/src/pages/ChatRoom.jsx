@@ -23,7 +23,9 @@ import {
   LogOut,
   Copy,
   Edit3, Trash2,
-  Check
+  Check,
+  Menu,
+  X
 } from 'lucide-react';
 import AIAssistant from '../components/AIAssistant';
 import EnhancedVideoCall from '../components/EnhancedVideoCall';
@@ -76,7 +78,9 @@ const ChatRoom = () => {
   const [uploadProgress, setUploadProgress] = useState(null);
   //Thêm mới "TYPING INDICATOR"
   const [typingUsers, setTypingUsers] = useState([]);
-  const typingTimeoutRef = useRef(null);
+ const typingTimeoutRef = useRef(null);
+  // Mobile responsive state
+  const [showSidebar, setShowSidebar] = useState(false);
   
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -639,16 +643,16 @@ const ChatRoom = () => {
   const renderMessageActions = (message, isOwn) => {
     if (editingMessageId === message.id) {
       return (
-        <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-100 transition-opacity`}>
+        <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-0.5 sm:gap-1 flex-wrap opacity-100 transition-opacity`}>
           <button 
             onClick={() => handleEditMessage(message.id, editingContent)}
-            className="text-xs px-2 py-1 rounded bg-green-100 hover:bg-green-200 text-green-700"
+            className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-green-100 hover:bg-green-200 text-green-700 whitespace-nowrap"
           >
             Lưu
           </button>
           <button 
             onClick={cancelEditing}
-            className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+            className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 whitespace-nowrap"
           >
             Hủy
           </button>
@@ -657,10 +661,10 @@ const ChatRoom = () => {
     }
 
     return (
-      <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
+      <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-0.5 sm:gap-1 flex-wrap opacity-0 group-hover:opacity-100 transition-opacity`}>
         <button 
           onClick={() => setReplyTo(message)} 
-          className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
+          className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
         >
           Trả lời
         </button>
@@ -677,7 +681,7 @@ const ChatRoom = () => {
               } : m
             ));
           }} 
-          className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200"
+          className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
         >
           Cảm xúc
         </button>
@@ -685,17 +689,17 @@ const ChatRoom = () => {
           <>
             <button 
               onClick={() => startEditing(message)} 
-              className="text-xs px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1"
+              className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-0.5 sm:gap-1 whitespace-nowrap"
             >
               <Edit3 className="h-3 w-3" />
-              Sửa
+              <span className="hidden sm:inline">Sửa</span>
             </button>
             <button 
               onClick={() => handleDeleteMessage(message.id)} 
-              className="text-xs px-2 py-1 rounded bg-red-100 hover:bg-red-200 text-red-700 flex items-center gap-1"
+              className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-red-100 hover:bg-red-200 text-red-700 flex items-center gap-0.5 sm:gap-1 whitespace-nowrap"
             >
               <Trash2 className="h-3 w-3" />
-              Xóa
+              <span className="hidden sm:inline">Xóa</span>
             </button>
           </>
         )}
@@ -707,9 +711,9 @@ const ChatRoom = () => {
   const renderMessageContent = (message, isOwn) => {
     if (editingMessageId === message.id) {
       return (
-        <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'} w-full`}>
+        <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-2 sm:px-3 py-1.5 sm:py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'} w-full`}>
           <input
-            className={`w-full bg-transparent outline-none ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
+            className={`w-full bg-transparent outline-none text-sm sm:text-base ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
             value={editingContent}
             onChange={(e) => setEditingContent(e.target.value)}
             onKeyDown={(e) => {
@@ -728,17 +732,17 @@ const ChatRoom = () => {
     switch (message.type) {
       case 'text':
         return (
-          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-2 sm:px-3 py-1.5 sm:py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'} break-words`}>
             {message.replyTo && (
-              <div className="text-xs opacity-80 mb-1 border-l-2 pl-2">
+              <div className="text-xs opacity-80 mb-1 border-l-2 pl-1 sm:pl-2">
                 Trả lời {message.replyTo.sender}: {message.replyTo.preview}
               </div>
             )}
-            <span>{message.content}</span>
+            <span className="text-sm sm:text-base break-words">{message.content}</span>
             {message.reactions && Object.keys(message.reactions).length > 0 && (
-              <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs`}>
+              <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs flex-wrap`}>
                 {Object.entries(message.reactions).map(([emo, count]) => (
-                  <span key={emo} className="px-2 py-0.5 rounded-full bg-black/10">
+                  <span key={emo} className="px-1.5 sm:px-2 py-0.5 rounded-full bg-black/10">
                     {emo} {count}
                   </span>
                 ))}
@@ -749,19 +753,19 @@ const ChatRoom = () => {
 
       case 'code':
         return (
-          <div className="bg-gray-100 rounded-lg p-3 mt-2 text-left">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <span className="text-xs font-medium text-gray-600">{message.language || 'code'}</span>
-                {message.fileName && (<span className="text-xs text-gray-500">({message.fileName})</span>)}
+          <div className="bg-gray-100 rounded-lg p-2 sm:p-3 mt-2 text-left">
+            <div className="flex items-center justify-between mb-1 sm:mb-2">
+              <div className="flex items-center space-x-1 sm:space-x-2 min-w-0">
+                <span className="text-xs font-medium text-gray-600 truncate">{message.language || 'code'}</span>
+                {message.fileName && (<span className="text-xs text-gray-500 truncate">({message.fileName})</span>)}
               </div>
-              <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                 <button className="text-xs text-blue-600 hover:text-blue-800 p-1">
                   <Download className="h-3 w-3" />
                 </button>
               </div>
             </div>
-            <pre className="text-sm text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 p-2 rounded border">{message.content}</pre>
+            <pre className="text-xs sm:text-sm text-gray-800 whitespace-pre-wrap font-mono bg-gray-50 p-1.5 sm:p-2 rounded border overflow-x-auto">{message.content}</pre>
           </div>
         );
 
@@ -771,17 +775,17 @@ const ChatRoom = () => {
             href={message.content}
             target="_blank" 
             rel="noopener noreferrer" 
-            className="bg-gray-100 rounded-lg p-3 mt-2 flex items-center space-x-3 hover:bg-gray-200"
+            className="bg-gray-100 rounded-lg p-2 sm:p-3 mt-2 flex items-center space-x-2 sm:space-x-3 hover:bg-gray-200"
             download={message.fileName}
           >
-            <FileText className="h-8 w-8 text-blue-500" />
-            <div className="flex-1">
-              <p className="font-medium text-sm text-gray-900">{message.fileName}</p>
+            <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-xs sm:text-sm text-gray-900 truncate">{message.fileName}</p>
               {message.fileSize && (
                 <p className="text-xs text-gray-500">{(message.fileSize / 1024).toFixed(1)} KB</p>
               )}
             </div>
-            <Download className="h-4 w-4 text-gray-600" />
+            <Download className="h-3 w-3 sm:h-4 sm:w-4 text-gray-600 flex-shrink-0" />
           </a>
         );
 
@@ -790,15 +794,15 @@ const ChatRoom = () => {
           <img 
             src={message.content}
             alt={message.fileName || 'Hình ảnh'}
-            className="max-w-xs rounded-lg object-cover cursor-pointer mt-2" 
+            className="max-w-[200px] sm:max-w-xs rounded-lg object-cover cursor-pointer mt-2" 
             onClick={() => window.open(message.content, '_blank')}
           />
         );
 
       default:
         return (
-          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
-            <span>{message.content}</span>
+          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-2 sm:px-3 py-1.5 sm:py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'} break-words`}>
+            <span className="text-sm sm:text-base break-words">{message.content}</span>
           </div>
         );
     }
@@ -810,17 +814,17 @@ const ChatRoom = () => {
                  (currentUser?.fullName || currentUser?.username || 'You') === message.sender;
 
     return (
-      <div className="px-4 py-2 group">
+      <div className="px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 group">
         <div className={`flex items-end ${isOwn ? 'justify-end' : 'justify-start'}`}>
           {!isOwn && (
-            <div className="mr-2 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+            <div className="mr-1.5 sm:mr-2 w-7 h-7 sm:w-8 sm:h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-medium flex-shrink-0">
               {message.avatar}
             </div>
           )}
-          <div className={`max-w-[72%] ${isOwn ? 'text-right' : 'text-left'}`}>
-            <div className={`mb-1 flex items-center gap-2 text-xs ${isOwn ? 'justify-end' : 'justify-start'} text-gray-500`}>
-              {!isOwn && <span className="font-medium text-gray-700">{message.sender}</span>}
-              <span>{formatTime(message.timestamp)}</span>
+          <div className={`max-w-[85%] sm:max-w-[75%] md:max-w-[72%] ${isOwn ? 'text-right' : 'text-left'}`}>
+            <div className={`mb-1 flex items-center gap-1 sm:gap-2 text-xs ${isOwn ? 'justify-end' : 'justify-start'} text-gray-500`}>
+              {!isOwn && <span className="font-medium text-gray-700 truncate max-w-[100px] sm:max-w-none">{message.sender}</span>}
+              <span className="whitespace-nowrap">{formatTime(message.timestamp)}</span>
             </div>
             
             {renderMessageContent(message, isOwn)}
@@ -828,7 +832,7 @@ const ChatRoom = () => {
             
           </div>
           {isOwn && (
-            <div className="ml-2 w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium flex-shrink-0">
+            <div className="ml-1.5 sm:ml-2 w-7 h-7 sm:w-8 sm:h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-medium flex-shrink-0">
               {message.avatar}
             </div>
           )}
@@ -837,80 +841,99 @@ const ChatRoom = () => {
     );
   };
   return (
-    <div className="flex h-screen bg-gray-100 overflow-hidden">
+    <div className="flex h-screen bg-gray-100 overflow-hidden relative">
+      {/* Mobile Sidebar Overlay */}
+      {showSidebar && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={() => setShowSidebar(false)}
+        />
+      )}
+      
       {/* Sidebar (channels/users) */}
-      <div className="w-72 bg-white border-r flex flex-col">
+      <div className={`fixed lg:static inset-y-0 left-0 z-50 lg:z-auto w-72 bg-white border-r flex flex-col transform transition-transform duration-300 ease-in-out ${
+        showSidebar ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
         {/* Current user card */}
-        <div className="p-4 border-b">
+        <div className="p-3 sm:p-4 border-b">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-3">
               <div className="relative">
-                <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center text-white font-medium">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-indigo-500 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-medium">
                   {(currentUser?.fullName || currentUser?.username || 'U').charAt(0).toUpperCase()}
                 </div>
-                <span className="absolute -bottom-1 -right-1 inline-block w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+                <span className="absolute -bottom-1 -right-1 inline-block w-2.5 h-2.5 sm:w-3 sm:h-3 bg-green-500 rounded-full border-2 border-white" />
               </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{currentUser?.fullName || currentUser?.username || 'User'}</p>
-                <p className="text-xs text-gray-500">Đang trực tuyến</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs sm:text-sm font-semibold text-gray-900 truncate">{currentUser?.fullName || currentUser?.username || 'User'}</p>
+                <p className="text-xs text-gray-500 hidden sm:block">Đang trực tuyến</p>
               </div>
             </div>
-            <div className="relative">
+            <div className="flex items-center space-x-1">
               <button
-                onClick={() => setShowUserDropdown(v => !v)}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-                title="Cài đặt"
+                onClick={() => setShowSidebar(false)}
+                className="lg:hidden p-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                title="Đóng menu"
               >
-                <Settings className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
-              {showUserDropdown && (
-                <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-10">
-                  <button
-                    onClick={() => {
-                      if (typeof sessionStorage !== 'undefined') {
-                        sessionStorage.removeItem('token');
-                        sessionStorage.removeItem('user');
-                      }
-                      localStorage.removeItem('token');
-                      localStorage.removeItem('user');
-                      window.location.href = '/';
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    <span>Đăng xuất</span>
-                  </button>
-                </div>
-              )}
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserDropdown(v => !v)}
+                  className="p-1.5 sm:p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                  title="Cài đặt"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+                {showUserDropdown && (
+                  <div className="absolute right-0 mt-2 w-44 bg-white border border-gray-200 rounded-md shadow-lg z-10">
+                    <button
+                      onClick={() => {
+                        if (typeof sessionStorage !== 'undefined') {
+                          sessionStorage.removeItem('token');
+                          sessionStorage.removeItem('user');
+                        }
+                        localStorage.removeItem('token');
+                        localStorage.removeItem('user');
+                        window.location.href = '/';
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center space-x-2"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      <span>Đăng xuất</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
         
         {/* Sidebar search */}
-        <div className="p-3 border-b">
+        <div className="p-2 sm:p-3 border-b">
           <input
             type="text"
             value={sidebarQuery}
             onChange={(e)=>setSidebarQuery(e.target.value)}
             placeholder="Tìm phòng hoặc người..."
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border border-gray-200 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-2 sm:mt-3 flex items-center gap-1.5 sm:gap-2">
             <input
               type="text"
               value={joinRoomCode}
               onChange={(e)=>setJoinRoomCode(e.target.value)}
               placeholder="Nhập mã phòng..."
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-1 border border-gray-200 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               onClick={joinByCode}
-              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 whitespace-nowrap"
             >Vào</button>
           </div>
           <button
             onClick={generateRoomCode}
-            className="mt-2 w-full text-sm px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="mt-2 w-full text-xs sm:text-sm px-2 sm:px-3 py-1.5 sm:py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
           >Tạo phòng ngẫu nhiên</button>
         </div>
         
@@ -960,88 +983,95 @@ const ChatRoom = () => {
       </div>
 
       {/* Main Chat Area */}
-      <div ref={dropRef} className="flex-1 flex flex-col">
+      <div ref={dropRef} className="flex-1 flex flex-col min-w-0">
         {/* Chat Header */}
-        <div className="bg-white border-b border-gray-200 p-4 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 rounded-full flex items-center justify-center">
+        <div className="bg-white border-b border-gray-200 p-2 sm:p-3 md:p-4 flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-2 sm:space-x-3 md:space-x-4 min-w-0 flex-1">
+            <button
+              onClick={() => setShowSidebar(true)}
+              className="lg:hidden p-1.5 sm:p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg flex-shrink-0"
+              title="Mở menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center flex-shrink-0">
               <img 
                 src="/images/icons/icon-cloudy.png" 
                 alt="Room" 
-                className="w-10 h-10 object-contain" 
+                className="w-8 h-8 sm:w-10 sm:h-10 object-contain" 
                 onError={(e) => {
                   e.target.style.display = 'none';
                   e.target.nextSibling.style.display = 'flex';
                 }}
               />
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full items-center justify-center text-white font-bold hidden">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-blue-400 to-purple-500 rounded-full items-center justify-center text-white text-xs sm:text-sm md:text-base font-bold hidden">
                 {roomId.charAt(0).toUpperCase()}
               </div>
             </div>
-            <div>
-              <h2 className="font-semibold text-gray-800">Phòng: {roomId}</h2>
-              <p className="text-sm text-gray-500">
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-gray-800 text-sm sm:text-base truncate">Phòng: {roomId}</h2>
+              <p className="text-xs sm:text-sm text-gray-500 truncate">
                 {onlineUsers.length > 0 ? onlineUsers.length : 1} thành viên
-                <span className={`ml-2 ${getConnectionStatusColor()}`}>
+                <span className={`ml-1 sm:ml-2 ${getConnectionStatusColor()}`}>
                   {getConnectionStatusText()}
                 </span>
               </p>
               {onlineUsers.length > 0 && (
-                <div className="mt-2 flex items-center gap-2 overflow-x-auto pr-2">
+                <div className="mt-1 sm:mt-2 flex items-center gap-1 sm:gap-2 overflow-x-auto pr-2">
                   {onlineUsers.map(u => (
-                    <div key={u.id} className="relative group" title={u.name}>
-                      <div className="w-7 h-7 bg-blue-500 rounded-full text-white flex items-center justify-center text-xs font-medium">
+                    <div key={u.id} className="relative group flex-shrink-0" title={u.name}>
+                      <div className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 bg-blue-500 rounded-full text-white flex items-center justify-center text-xs font-medium">
                         {(u.name || 'U').charAt(0).toUpperCase()}
                       </div>
-                      <span className={`absolute -bottom-0.5 -right-0.5 inline-block w-2.5 h-2.5 rounded-full border-2 border-white ${getStatusColor(u.status)}`} />
+                      <span className={`absolute -bottom-0.5 -right-0.5 inline-block w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full border-2 border-white ${getStatusColor(u.status)}`} />
                     </div>
                   ))}
                 </div>
               )}
             </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <div className="relative group">
+          <div className="flex items-center space-x-1 sm:space-x-2 flex-shrink-0">
+            <div className="relative group hidden sm:flex">
               <div className="flex items-center space-x-2 cursor-pointer select-none">
-                <div className="w-8 h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-indigo-500 rounded-full flex items-center justify-center text-white text-xs sm:text-sm font-medium">
                   {(currentUser?.fullName || currentUser?.username || 'U').charAt(0).toUpperCase()}
                 </div>
-                <span className="text-sm font-medium hidden sm:block">{currentUser?.fullName || currentUser?.username || 'User'}</span>
+                <span className="text-xs sm:text-sm font-medium hidden md:block">{currentUser?.fullName || currentUser?.username || 'User'}</span>
               </div>
             </div>
             <button 
               onClick={shareRoom}
-              className={`p-2 rounded-lg transition-colors ${copiedLink ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              className={`p-1.5 sm:p-2 rounded-lg transition-colors ${copiedLink ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
               title={copiedLink ? "Đã copy link!" : "Chia sẻ phòng"}
             >
-              {copiedLink ? <Check className="h-5 w-5" /> : <Share2 className="h-5 w-5" />}
+              {copiedLink ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : <Share2 className="h-4 w-4 sm:h-5 sm:w-5" />}
             </button>
             <button 
               onClick={() => setShowAIAssistant(!showAIAssistant)} 
-              className={`p-2 rounded-lg transition-colors ${showAIAssistant ? 'bg-purple-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`} 
+              className={`p-1.5 sm:p-2 rounded-lg transition-colors ${showAIAssistant ? 'bg-purple-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`} 
               title="AI Assistant"
             >
-              <Bot className="h-5 w-5" />
+              <Bot className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
             <button 
               onClick={() => {
                 setIsVoiceCall(true);
                 setIsVideoCall(false);
               }} 
-              className={`p-2 rounded-lg transition-colors ${isVoiceCall ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              className={`p-1.5 sm:p-2 rounded-lg transition-colors ${isVoiceCall ? 'bg-green-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
               title="Gọi thoại"
             >
-              <Phone className="h-5 w-5" />
+              <Phone className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
             <button 
               onClick={() => {
                 setIsVideoCall(true);
                 setIsVoiceCall(false);
               }} 
-              className={`p-2 rounded-lg transition-colors ${isVideoCall ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+              className={`p-1.5 sm:p-2 rounded-lg transition-colors ${isVideoCall ? 'bg-blue-500 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
               title="Gọi video"
             >
-              <Video className="h-5 w-5" />
+              <Video className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           </div>
         </div>
@@ -1082,21 +1112,21 @@ const ChatRoom = () => {
                           {message.avatar}
                         </div>
                       )}
-                      <div className={`max-w-[72%] ${isOwn ? 'text-right' : 'text-left'}`}>
-                        <div className={`mb-1 flex items-center gap-2 text-xs ${isOwn ? 'justify-end' : 'justify-start'} text-gray-500`}>
-                          {!isOwn && <span className="font-medium text-gray-700">{message.sender}</span>}
-                          <span>{formatTime(message.timestamp)}</span>
+                      <div className={`max-w-[85%] sm:max-w-[75%] md:max-w-[72%] ${isOwn ? 'text-right' : 'text-left'}`}>
+                        <div className={`mb-1 flex items-center gap-1 sm:gap-2 text-xs ${isOwn ? 'justify-end' : 'justify-start'} text-gray-500`}>
+                          {!isOwn && <span className="font-medium text-gray-700 truncate max-w-[100px] sm:max-w-none">{message.sender}</span>}
+                          <span className="whitespace-nowrap">{formatTime(message.timestamp)}</span>
                         </div>
                         {message.type === 'text' && (
-                          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-3 py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+                          <div className={`${isOwn ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} inline-block px-2 sm:px-3 py-1.5 sm:py-2 rounded-2xl ${isOwn ? 'rounded-br-sm' : 'rounded-bl-sm'} break-words`}>
                             {message.replyTo && (
-                              <div className="text-xs opacity-80 mb-1 border-l-2 pl-2">
+                              <div className="text-xs opacity-80 mb-1 border-l-2 pl-1 sm:pl-2">
                                 Trả lời {message.replyTo.sender}: {message.replyTo.preview}
                               </div>
                             )}
                              {editingMessageId === message.id ? (
       <input
-        className={`w-full bg-transparent outline-none ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
+        className={`w-full bg-transparent outline-none text-sm sm:text-base ${isOwn ? 'placeholder-white/80' : 'placeholder-gray-500'}`}
         value={editingContent}
         onChange={(e) => setEditingContent(e.target.value)}
         onKeyDown={(e) => {
@@ -1109,13 +1139,13 @@ const ChatRoom = () => {
         autoFocus
       />
     ) : (
-      <span>{message.content}</span>
+      <span className="text-sm sm:text-base break-words">{message.content}</span>
     )}
     
     {message.reactions && Object.keys(message.reactions).length>0 && (
-      <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs`}>
+      <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 text-xs flex-wrap`}>
         {Object.entries(message.reactions).map(([emo, count]) => (
-          <span key={emo} className="px-2 py-0.5 rounded-full bg-black/10">
+          <span key={emo} className="px-1.5 sm:px-2 py-0.5 rounded-full bg-black/10">
             {emo} {count}
           </span>
         ))}
@@ -1162,21 +1192,21 @@ const ChatRoom = () => {
                          <img 
                           src={message.content} // Dùng content (URL)
                           alt={message.fileName || 'Hình ảnh'}
-                          className="max-w-xs rounded-lg object-cover cursor-pointer mt-2" 
+                          className="max-w-[200px] sm:max-w-xs rounded-lg object-cover cursor-pointer mt-2" 
                           onClick={() => window.open(message.content, '_blank')} // Click để xem ảnh
                         />
                       )}
                         {/* KẾt thúc upload file */}
-                        <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
-                          <button onClick={()=>setReplyTo(message)} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Trả lời</button>
+                        <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-0.5 sm:gap-1 flex-wrap opacity-0 group-hover:opacity-100 transition-opacity`}>
+                          <button onClick={()=>setReplyTo(message)} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Trả lời</button>
                           <button onClick={()=>{
                             const emo='👍';
                             setMessages(prev => prev.map(m => m.id===message.id ? { ...m, reactions: { ...m.reactions, [emo]: (m.reactions?.[emo]||0)+1 } } : m));
-                          }} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Cảm xúc</button>
+                          }} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Cảm xúc</button>
                           {isOwn && (
                             <>
-                              <button onClick={()=>{ setEditingMessageId(message.id); setEditingContent(message.content); }} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200">Sửa</button>
-                              <button onClick={()=> setMessages(prev => prev.filter(m => m.id!==message.id))} className="text-xs px-2 py-1 rounded bg-gray-100 hover:bg-gray-200 text-red-600">Xóa</button>
+                              <button onClick={()=>{ setEditingMessageId(message.id); setEditingContent(message.content); }} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Sửa</button>
+                              <button onClick={()=> setMessages(prev => prev.filter(m => m.id!==message.id))} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 text-red-600 whitespace-nowrap">Xóa</button>
                             </>
                           )}
                         </div>
@@ -1206,82 +1236,82 @@ const ChatRoom = () => {
 
        
        {/* Message Input */}
-               <div className="bg-white border-t border-gray-200 p-4">
+        <div className="bg-white border-t border-gray-200 p-2 sm:p-3 md:p-4">
        {uploadProgress !== null && (
-              <div className="mb-2">
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
-                </div>
-                <p className="text-center text-xs text-gray-500 mt-1">Đang tải lên... {uploadProgress}%</p>
-              </div>
-            )}
-          {replyTo && (
-            <div className="mb-2 text-xs text-gray-600 border-l-2 border-blue-400 pl-2">
-              Trả lời {replyTo.sender}: {String(replyTo.content).slice(0,120)}
-              <button className="ml-2 text-blue-600" onClick={()=>setReplyTo(null)}>Hủy</button>
-            </div>
-          )}
-          
+            <div className="mb-2">
+              <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
+                <div className="bg-blue-500 h-1.5 sm:h-2 rounded-full" style={{ width: `${uploadProgress}%` }}></div>
+              </div>
+              <p className="text-center text-xs text-gray-500 mt-1">Đang tải lên... {uploadProgress}%</p>
+            </div>
+          )}
+          {replyTo && (
+            <div className="mb-2 text-xs text-gray-600 border-l-2 border-blue-400 pl-2 break-words">
+              Trả lời {replyTo.sender}: {String(replyTo.content).slice(0,80)}...
+              <button className="ml-2 text-blue-600 whitespace-nowrap" onClick={()=>setReplyTo(null)}>Hủy</button>
+            </div>
+          )}
+          
           {/* === FIX LỖI VỊ TRÍ === */}
           {/* (1) Hiển thị "Đang nhập..." CỦA BẠN (local) */}
-          {isTyping && (
-            <div className="mb-2 text-xs text-gray-500 italic">Bạn đang nhập...</div>
-          )}
+          {isTyping && (
+            <div className="mb-2 text-xs text-gray-500 italic">Bạn đang nhập...</div>
+          )}
           
           {/* (2) Hiển thị "Đang nhập..." CỦA NGƯỜI KHÁC (remote) */}
-          {typingUsers.length > 0 && (
-            <div className="mb-2 text-xs text-gray-500 italic">
-              {typingUsers.join(', ')} đang soạn tin...
-            </div>
-          )}
+          {typingUsers.length > 0 && (
+            <div className="mb-2 text-xs text-gray-500 italic truncate">
+              {typingUsers.join(', ')} đang soạn tin...
+            </div>
+          )}
           
 
-          <div className="flex items-center space-x-2">
-            <button onClick={() => fileInputRef.current?.click()} className="p-2 text-gray-500 hover:text-gray-700"><Paperclip className="h-5 w-5" /></button>
-            <button onClick={() => setShowCodeEditor(true)} className="p-2 text-gray-500 hover:text-gray-700"><Code className="h-5 w-5" /></button>
-            <div className="flex-1 relative">
-              <input 
-                type="text" 
-                value={newMessage}
-                onChange={(e) => {
-                  setNewMessage(e.target.value);
-                  
+          <div className="flex items-center space-x-1 sm:space-x-2">
+            <button onClick={() => fileInputRef.current?.click()} className="p-1.5 sm:p-2 text-gray-500 hover:text-gray-700 flex-shrink-0"><Paperclip className="h-4 w-4 sm:h-5 sm:w-5" /></button>
+            <button onClick={() => setShowCodeEditor(true)} className="p-1.5 sm:p-2 text-gray-500 hover:text-gray-700 flex-shrink-0"><Code className="h-4 w-4 sm:h-5 sm:w-5" /></button>
+            <div className="flex-1 relative min-w-0">
+              <input 
+                type="text" 
+                value={newMessage}
+                onChange={(e) => {
+                  setNewMessage(e.target.value);
+                  
                     {/*  CẬP NHẬT: Gọi cả 2 logic */}
-                  // (1) Logic "isTyping" local 
-                    setIsTyping(true);
-                  if (window.__typingTimer) {
-                    clearTimeout(window.__typingTimer);
-                  }
-                  window.__typingTimer = window.setTimeout(()=>setIsTyping(false), 1200);
+                  // (1) Logic "isTyping" local 
+                  setIsTyping(true);
+                  if (window.__typingTimer) {
+                    clearTimeout(window.__typingTimer);
+                  }
+                  window.__typingTimer = window.setTimeout(()=>setIsTyping(false), 1200);
 
                     // (2) Logic "typing" remote
                     handleTyping(); 
-                }} 
-                onKeyDown={async (e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendStopTypingEvent(); // Dừng gõ khi gửi
-                    await sendMessage();
-                  }
-                }} 
-                placeholder="Nhập tin nhắn..." 
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" 
-              />
-              <button onClick={()=>setShowEmoji(v=>!v)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"><Smile className="h-5 w-5" /></button>
-              {showEmoji && (
-                <div className="absolute bottom-12 right-0 z-50 bg-white rounded-lg shadow-lg border p-2 w-64">
-                    <div className="grid grid-cols-8 gap-1 text-xl">
+                }} 
+                onKeyDown={async (e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendStopTypingEvent(); // Dừng gõ khi gửi
+                    await sendMessage();
+                  }
+                }} 
+                placeholder="Nhập tin nhắn..." 
+                className="w-full border border-gray-300 rounded-lg px-2 sm:px-3 md:px-4 py-1.5 sm:py-2 pr-8 sm:pr-10 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500" 
+              />
+              <button onClick={()=>setShowEmoji(v=>!v)} className="absolute right-1.5 sm:right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"><Smile className="h-4 w-4 sm:h-5 sm:w-5" /></button>
+              {showEmoji && (
+                <div className="absolute bottom-12 right-0 z-50 bg-white rounded-lg shadow-lg border p-2 w-56 sm:w-64">
+                    <div className="grid grid-cols-8 gap-1 text-lg sm:text-xl">
                     {EMOJIS.map((e, i) => (
-                      <button key={i} className="hover:bg-gray-100 rounded" onClick={() => { setNewMessage(prev => prev + e); setShowEmoji(false); }}>
+                      <button key={i} className="hover:bg-gray-100 rounded p-1" onClick={() => { setNewMessage(prev => prev + e); setShowEmoji(false); }}>
                         {e}
                       </button>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-            <button onClick={sendMessage} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><Send className="h-5 w-5" /></button>
-          </div>
+                </div>
+              )}
+            </div>
+            <button onClick={sendMessage} className="p-1.5 sm:p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex-shrink-0"><Send className="h-4 w-4 sm:h-5 sm:w-5" /></button>
+          </div>
 
           {/*ĐÃ BỊ XÓA KHỎI VỊ TRÍ NÀY VÀ DI CHUYỂN LÊN TRÊN
           {isTyping && (
@@ -1332,52 +1362,52 @@ const ChatRoom = () => {
 
       {/* Share Room Modal */}
       {showShareModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Chia sẻ phòng chat</h3>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-semibold">Chia sẻ phòng chat</h3>
               <button 
                 onClick={() => setShowShareModal(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-gray-500 hover:text-gray-700 text-xl sm:text-2xl p-1"
               >
                 ×
               </button>
             </div>
             
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="mb-3 sm:mb-4">
+              <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1 sm:mb-2">
                 Link phòng chat:
               </label>
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 sm:space-x-2">
                 <input
                   type="text"
                   readOnly
                   value={`${window.location.origin}/chat/${roomId}`}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-sm"
+                  className="flex-1 px-2 sm:px-3 py-1.5 sm:py-2 border border-gray-300 rounded-lg bg-gray-50 text-xs sm:text-sm min-w-0"
                 />
                 <button
                   onClick={copyRoomLink}
-                  className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="p-1.5 sm:p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex-shrink-0"
                   title="Copy link"
                 >
-                  {copiedLink ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+                  {copiedLink ? <Check className="h-4 w-4 sm:h-5 sm:w-5" /> : <Copy className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </button>
               </div>
             </div>
 
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-sm text-blue-800">
-                <strong>Mã phòng:</strong> <code className="bg-white px-2 py-1 rounded font-mono">{roomId}</code>
+            <div className="mb-3 sm:mb-4 p-2 sm:p-3 bg-blue-50 rounded-lg">
+              <p className="text-xs sm:text-sm text-blue-800 break-words">
+                <strong>Mã phòng:</strong> <code className="bg-white px-1.5 sm:px-2 py-0.5 sm:py-1 rounded font-mono text-xs sm:text-sm">{roomId}</code>
               </p>
-              <p className="text-xs text-blue-600 mt-2">
+              <p className="text-xs text-blue-600 mt-1 sm:mt-2">
                 Gửi link này cho bạn bè để họ tham gia phòng chat. Họ cần đăng nhập để vào phòng.
               </p>
             </div>
 
-            <div className="flex justify-end space-x-2">
+            <div className="flex justify-end space-x-1.5 sm:space-x-2 flex-wrap gap-2">
               <button
                 onClick={() => setShowShareModal(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors text-sm sm:text-base"
               >
                 Đóng
               </button>
@@ -1392,7 +1422,7 @@ const ChatRoom = () => {
                     }).catch(err => console.log('Error sharing:', err));
                   }
                 }}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
               >
                 Chia sẻ
               </button>
