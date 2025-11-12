@@ -17,10 +17,14 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.smartchat.chatfacetimesmartdev.dto.ActiveSessionDTO;
+import com.smartchat.chatfacetimesmartdev.dto.SessionResponse;
 import com.smartchat.chatfacetimesmartdev.entity.User;
 import com.smartchat.chatfacetimesmartdev.repository.UserRepository;
+import com.smartchat.chatfacetimesmartdev.service.SecurityService;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -32,6 +36,9 @@ public class AdminController {
     
     @Autowired
     private PasswordEncoder passwordEncoder;
+    
+    @Autowired
+    private SecurityService securityService;
     
     @GetMapping("/dashboard")
     public ResponseEntity<?> getDashboardStats() {
@@ -249,6 +256,82 @@ public class AdminController {
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("error", "Lỗi khi cập nhật người dùng: " + e.getMessage()));
+        }
+    }
+    
+    // ==================== SECURITY ENDPOINTS ====================
+    
+    /**
+     * Lấy danh sách active sessions
+     */
+    @GetMapping("/security/sessions/active")
+    public ResponseEntity<?> getActiveSessions() {
+        try {
+            List<ActiveSessionDTO> sessions = securityService.getActiveSessions();
+            return ResponseEntity.ok(sessions);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "Lỗi khi lấy danh sách sessions: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Force logout session
+     */
+    @PostMapping("/security/sessions/{sessionId}/invalidate")
+    public ResponseEntity<?> forceLogout(@PathVariable String sessionId) {
+        try {
+            boolean success = securityService.forceLogout(sessionId);
+            if (success) {
+                return ResponseEntity.ok(SessionResponse.success("Force logout thành công"));
+            } else {
+                return ResponseEntity.status(404).body(SessionResponse.error("Session không tồn tại"));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(SessionResponse.error("Lỗi khi force logout: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Lấy login history
+     */
+    @GetMapping("/security/sessions/history")
+    public ResponseEntity<?> getLoginHistory(@RequestParam(defaultValue = "7") int days) {
+        try {
+            List<ActiveSessionDTO> history = securityService.getLoginHistory(days);
+            return ResponseEntity.ok(history);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "Lỗi khi lấy lịch sử đăng nhập: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Lấy session statistics
+     */
+    @GetMapping("/security/sessions/stats")
+    public ResponseEntity<?> getSessionStats() {
+        try {
+            Map<String, Object> stats = securityService.getSessionStats();
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("error", "Lỗi khi lấy thống kê sessions: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Force logout tất cả sessions của user
+     */
+    @PostMapping("/security/users/{userId}/sessions/invalidate-all")
+    public ResponseEntity<?> forceLogoutAllUserSessions(@PathVariable Long userId) {
+        try {
+            int count = securityService.forceLogoutAllUserSessions(userId);
+            return ResponseEntity.ok(SessionResponse.success("Đã force logout " + count + " session(s)", Map.of("count", count)));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(SessionResponse.error("Lỗi khi force logout: " + e.getMessage()));
         }
     }
 }

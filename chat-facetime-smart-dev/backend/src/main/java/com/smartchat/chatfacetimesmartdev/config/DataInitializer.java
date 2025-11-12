@@ -36,12 +36,15 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("✅ Admin user created: username=admin, password=12345");
         } else {
             // Cập nhật admin user hiện tại
-            System.out.println("ℹ️ Admin user already exists, updating password...");
+            System.out.println("ℹ️ Admin user already exists, updating password and ensuring active status...");
         }
         
-        // Luôn cập nhật password để đảm bảo đúng
+        // Luôn cập nhật password và đảm bảo admin user được enable
         adminUser.setPassword(passwordEncoder.encode("12345"));
+        adminUser.setActive(true); // Đảm bảo admin user luôn được enable
+        adminUser.setRole(User.Role.ADMIN); // Đảm bảo role là ADMIN
         adminUser.setUpdatedAt(LocalDateTime.now());
         userRepository.save(adminUser);
+        System.out.println("✅ Admin user updated: active=true, role=ADMIN");
     }
 }

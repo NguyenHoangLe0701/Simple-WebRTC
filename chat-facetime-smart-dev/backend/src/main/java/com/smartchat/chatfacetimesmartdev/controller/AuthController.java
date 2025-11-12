@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.smartchat.chatfacetimesmartdev.dto.AuthResponseDto;
 import com.smartchat.chatfacetimesmartdev.dto.LoginDto;
 import com.smartchat.chatfacetimesmartdev.service.AuthService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 @RestController
@@ -39,15 +40,53 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginDto dto) {
+    public ResponseEntity<?> login(@Valid @RequestBody LoginDto dto, HttpServletRequest request) {
         try {
-            AuthResponseDto response = authService.login(dto);
+            // Lấy thông tin từ request
+            String ipAddress = getClientIpAddress(request);
+            String userAgent = request.getHeader("User-Agent");
+            String deviceInfo = getDeviceInfo(userAgent);
+            
+            AuthResponseDto response = authService.login(dto, ipAddress, userAgent, deviceInfo);
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             Map<String, String> error = new HashMap<>();
             error.put("error", e.getMessage());
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
         }
+    }
+    
+    /**
+     * Lấy IP address của client
+     */
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty() && !"unknown".equalsIgnoreCase(xForwardedFor)) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty() && !"unknown".equalsIgnoreCase(xRealIp)) {
+            return xRealIp;
+        }
+        return request.getRemoteAddr();
+    }
+    
+    /**
+     * Lấy device info từ user agent
+     */
+    private String getDeviceInfo(String userAgent) {
+        if (userAgent == null || userAgent.isEmpty()) {
+            return "Unknown";
+        }
+        String deviceInfo = "Unknown";
+        if (userAgent.toLowerCase().contains("mobile") || userAgent.toLowerCase().contains("android") || userAgent.toLowerCase().contains("iphone")) {
+            deviceInfo = "Mobile";
+        } else if (userAgent.toLowerCase().contains("tablet") || userAgent.toLowerCase().contains("ipad")) {
+            deviceInfo = "Tablet";
+        } else {
+            deviceInfo = "Desktop";
+        }
+        return deviceInfo;
     }
     
     @GetMapping("/me")

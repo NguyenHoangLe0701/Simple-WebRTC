@@ -14,8 +14,10 @@ import org.springframework.stereotype.Service;
 import com.smartchat.chatfacetimesmartdev.dto.AuthResponseDto;
 import com.smartchat.chatfacetimesmartdev.dto.LoginDto;
 import com.smartchat.chatfacetimesmartdev.dto.RegisterDto;
+import com.smartchat.chatfacetimesmartdev.entity.LoginSession;
 import com.smartchat.chatfacetimesmartdev.entity.User;
 import com.smartchat.chatfacetimesmartdev.repository.UserRepository;
+import com.smartchat.chatfacetimesmartdev.service.SecurityService;
 import com.smartchat.chatfacetimesmartdev.util.JwtUtil;
 
 @Service
@@ -29,6 +31,9 @@ public class AuthService {
     
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private SecurityService securityService;
     
     
     public AuthResponseDto register(RegisterDto registerDto) {
@@ -73,6 +78,10 @@ public class AuthService {
     }
     
     public AuthResponseDto login(LoginDto loginDto) {
+        return login(loginDto, null, null, null);
+    }
+    
+    public AuthResponseDto login(LoginDto loginDto, String ipAddress, String userAgent, String deviceInfo) {
         System.out.println("Login attempt for: " + loginDto.getUsernameOrEmail());
         
         // Tìm user theo username trước
@@ -108,10 +117,31 @@ public class AuthService {
         user.setLastLogin(LocalDateTime.now());
         userRepository.save(user);
         
-        // Tạo JWT token
+        // Tạo login session trước để có sessionId
+        String sessionId = null;
+        if (ipAddress != null && userAgent != null) {
+            try {
+                LoginSession session = securityService.createLoginSession(
+                    user.getId(), 
+                    ipAddress, 
+                    userAgent, 
+                    deviceInfo != null ? deviceInfo : "Unknown"
+                );
+                sessionId = session.getSessionId();
+                System.out.println("Login session created: " + sessionId);
+            } catch (Exception e) {
+                System.err.println("Error creating login session: " + e.getMessage());
+                // Nếu không tạo được session, vẫn cho phép login
+            }
+        }
+        
+        // Tạo JWT token với sessionId trong claims
         Map<String, Object> extraClaims = new HashMap<>();
         extraClaims.put("userId", user.getId());
         extraClaims.put("role", user.getRole().name());
+        if (sessionId != null) {
+            extraClaims.put("sessionId", sessionId);
+        }
         
         String token = jwtUtil.generateToken(user, extraClaims);
         
