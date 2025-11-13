@@ -1554,7 +1554,7 @@ const ChatRoom = () => {
         onMinimize={() => setIsAIMinimized(!isAIMinimized)} 
       />
 
-      {/* Video Call */}
+      {/* Video Call / Voice Call */}
       <EnhancedVideoCall 
         isActive={isVideoCall || isVoiceCall} 
         onEndCall={()=>{ 
@@ -1564,6 +1564,7 @@ const ChatRoom = () => {
         }} 
         roomId={roomId}
         currentUser={currentUser}
+        callType={isVideoCall ? 'video' : 'voice'}
       />
 
       {/* Share Room Modal */}
