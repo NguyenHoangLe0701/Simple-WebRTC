@@ -82,26 +82,26 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-full max-w-4xl bg-white rounded-lg shadow p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-6 sm:px-6 sm:py-8">
+      <div className="w-full max-w-4xl bg-white rounded-lg shadow p-4 sm:p-6 md:p-8">
         {/* Header với logo và tiêu đề cùng hàng */}
-        <div className="flex items-center justify-between mb-6">
-          {/* Logo bên trái */}
-          <div className="flex-shrink-0 mr-6">
+        <div className="flex flex-col md:flex-row items-center md:items-start md:justify-between mb-4 sm:mb-6">
+          {/* Logo bên trái - ẩn trên mobile nhỏ, hiển thị trên tablet+ */}
+          <div className="flex-shrink-0 mb-4 md:mb-0 md:mr-6 hidden sm:block">
             <a href="/">
               <img
                 src="images/icons/logo-simplewebrtc.svg" 
                 alt="SimpleWebRTC Logo"
-                className="h-16 w-18 mb-64 ml-5"
+                className="h-12 w-14 sm:h-14 sm:w-16 md:h-16 md:w-18"
               />
             </a>
           </div>
 
           {/* Tiêu đề và nội dung bên phải */}
-          <div className="w-2/3">
+          <div className="w-full md:w-2/3">
             {/* Tiêu đề và mô tả */}
-            <h1 className="text-2xl font-bold mb-2 text-left">Chào mừng trở lại!</h1>
-            <p className="text-gray-600 text-left mb-6">
+            <h1 className="text-xl sm:text-2xl font-bold mb-2 text-center md:text-left">Chào mừng trở lại!</h1>
+            <p className="text-sm sm:text-base text-gray-600 text-center md:text-left mb-4 sm:mb-6">
               Chưa có tài khoản?{" "}
               <Link to="/register" className="text-[#00b0eb] hover:text-[#0077B6] transition duration-300">
                 Đăng ký ngay
@@ -110,25 +110,25 @@ function Login() {
 
             {/* Alert Messages */}
             {error && (
-              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center">
-                <AlertCircle className="h-5 w-5 mr-2" />
-                {error}
+              <div className="mb-4 p-2 sm:p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center text-sm sm:text-base">
+                <AlertCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 flex-shrink-0" />
+                <span className="break-words">{error}</span>
               </div>
             )}
 
             {success && (
-              <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center">
-                <CheckCircle className="h-5 w-5 mr-2" />
-                {success}
+              <div className="mb-4 p-2 sm:p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center text-sm sm:text-base">
+                <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2 flex-shrink-0" />
+                <span className="break-words">{success}</span>
               </div>
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
               <div>
                 <label
                   htmlFor="usernameOrEmail"
-                  className="block text-base font-medium text-gray-600"
+                  className="block text-sm sm:text-base font-medium text-gray-600"
                 >
                   Username hoặc Email
                 </label>
@@ -139,7 +139,7 @@ function Login() {
                   value={formData.usernameOrEmail}
                   onChange={handleChange}
                   required
-                  className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2 sm:p-2.5 text-sm sm:text-base shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                   placeholder="Nhập username hoặc email"
                 />
               </div>
@@ -147,7 +147,7 @@ function Login() {
               <div>
                 <label
                   htmlFor="password"
-                  className="block text-base font-medium text-gray-600"
+                  className="block text-sm sm:text-base font-medium text-gray-600"
                 >
                   Mật khẩu
                 </label>
@@ -158,7 +158,7 @@ function Login() {
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  className="mt-1 block w-full rounded-md border border-gray-300 p-2 sm:p-2.5 text-sm sm:text-base shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
                   placeholder="Nhập mật khẩu"
                 />
               </div>
@@ -172,32 +172,32 @@ function Login() {
                   {loading ? "Đang đăng nhập..." : "Đăng nhập"}
                 </button>
               </div> */}
-              <div className="flex items-center justify-between">
-  <button
-    type="submit"
-    disabled={loading}
-    className="w-32 bg-brand-bg text-white font-semibold py-2 px-6 rounded-3xl hover:bg-primaryHover transition disabled:opacity-50 disabled:cursor-not-allowed"
-  >
-    {loading ? (
-      <div className="flex items-center justify-center gap-2">
-        {/* Spinner */}
-        <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-        <span>Đăng nhập</span>
-      </div>
-    ) : (
-      "Đăng nhập"
-    )}
-  </button>
-</div>
-
-              <aside className="text-left mt-3">
-                <Link
-                  to="/forgotpassword"
-                  className="text-base text-[#00b0eb] hover:text-[#0077B6] transition duration-300"
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-between gap-3">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full sm:w-auto sm:min-w-[128px] bg-brand-bg text-white font-semibold py-2.5 sm:py-2 px-6 rounded-3xl hover:bg-primaryHover transition disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                 >
-                  Quên mật khẩu?
-                </Link>
-              </aside>
+                  {loading ? (
+                    <div className="flex items-center justify-center gap-2">
+                      {/* Spinner */}
+                      <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      <span>Đăng nhập</span>
+                    </div>
+                  ) : (
+                    "Đăng nhập"
+                  )}
+                </button>
+                
+                <aside className="text-center sm:text-left">
+                  <Link
+                    to="/forgotpassword"
+                    className="text-sm sm:text-base text-[#00b0eb] hover:text-[#0077B6] transition duration-300"
+                  >
+                    Quên mật khẩu?
+                  </Link>
+                </aside>
+              </div>
 
               {/* Removed hardcoded admin credentials hint */}
             </form>
