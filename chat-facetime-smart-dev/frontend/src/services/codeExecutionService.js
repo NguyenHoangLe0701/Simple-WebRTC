@@ -52,7 +52,7 @@ export const codeExecutionService = {
   },
 
   loadFile: (filePath) => {
-    return api.get('/code/load', {
+    return api.get('/api/code/load', { 
       params: { filePath }
     });
   },
