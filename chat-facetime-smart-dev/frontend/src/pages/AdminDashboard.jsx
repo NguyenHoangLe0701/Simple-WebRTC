@@ -47,7 +47,25 @@ import {
   EyeOff,
   UserMinus,
   Star,
-  TrendingUp as Growth
+  TrendingUp as Growth,
+  HardDrive,
+  Server,
+  Activity as ActivityIcon,
+  FileText,
+  History,
+  Wrench,
+  AlertCircle,
+  PlayCircle,
+  PauseCircle,
+  RotateCcw,
+  Layers,
+  Table,
+  Database as DbIcon,
+  Gauge,
+  HardDrive as StorageIcon,
+  Terminal,
+  FileCheck,
+  FileX
 } from 'lucide-react';
 import api from '../services/api';
 import UsersComponent from './admin/Users';
@@ -829,27 +847,337 @@ const AdminDashboard = () => {
 
           {/* Database Tab */}
           {activeTab === 'database' && (
-            <div className="bg-white rounded-2xl shadow-lg p-8">
-              <div className="text-center">
-                <div className="w-20 h-20 bg-gradient-to-r from-cyan-500 to-cyan-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Database className="h-10 w-10 text-white" />
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-white rounded-2xl shadow-lg p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-2xl font-bold text-gray-900">Quản lý Database</h3>
+                    <p className="text-gray-600 mt-1">Quản lý và giám sát cơ sở dữ liệu hệ thống</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-sm font-medium text-green-600">Online</span>
+                  </div>
                 </div>
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">Quản lý Database</h3>
-                <p className="text-gray-600 mb-6">Tính năng quản lý cơ sở dữ liệu</p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl mx-auto">
-                  <div className="p-4 bg-cyan-50 rounded-xl">
-                    <Database className="h-8 w-8 text-cyan-600 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-cyan-900">Quản lý DB</p>
-                  </div>
-                  <div className="p-4 bg-cyan-50 rounded-xl">
-                    <Zap className="h-8 w-8 text-cyan-600 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-cyan-900">Tối ưu hóa</p>
-                  </div>
-                  <div className="p-4 bg-cyan-50 rounded-xl">
-                    <Settings className="h-8 w-8 text-cyan-600 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-cyan-900">Cài đặt</p>
-                  </div>
               </div>
+
+              {/* 1. Thông tin tổng quan Database */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Trạng thái Database */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <Database className="h-5 w-5 mr-2 text-cyan-600" />
+                      Trạng thái Database
+                    </h4>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Connection Status */}
+                    <div className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                          <CheckCircle className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900">Trạng thái kết nối</p>
+                          <p className="text-sm text-gray-600">Database Server</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                          <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                          Online
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Database Version */}
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-cyan-100 rounded-lg flex items-center justify-center">
+                            <Server className="h-5 w-5 text-cyan-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Phiên bản Database</p>
+                            <p className="font-semibold text-gray-900">MySQL 8.0.35</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Storage Usage */}
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                            <StorageIcon className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Dung lượng sử dụng</p>
+                            <p className="font-semibold text-gray-900">2.5 GB / 10 GB</p>
+                          </div>
+                        </div>
+                        <span className="text-sm font-medium text-blue-600">25%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                        <div className="bg-gradient-to-r from-blue-500 to-blue-600 h-2.5 rounded-full" style={{width: '25%'}}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Thống kê nhanh */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <ActivityIcon className="h-5 w-5 mr-2 text-cyan-600" />
+                      Thống kê nhanh
+                    </h4>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Số lượng bảng */}
+                    <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 rounded-xl border border-cyan-200 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 bg-gradient-to-r from-cyan-500 to-cyan-600 rounded-lg flex items-center justify-center">
+                            <Table className="h-6 w-6 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Số lượng bảng</p>
+                            <p className="text-2xl font-bold text-gray-900">24</p>
+                          </div>
+                        </div>
+                        <TrendingUp className="h-5 w-5 text-green-500" />
+                      </div>
+                    </div>
+
+                    {/* Tổng số bản ghi */}
+                    <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg flex items-center justify-center">
+                            <FileText className="h-6 w-6 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Tổng số bản ghi</p>
+                            <p className="text-2xl font-bold text-gray-900">1,234,567</p>
+                          </div>
+                        </div>
+                        <TrendingUp className="h-5 w-5 text-green-500" />
+                      </div>
+                    </div>
+
+                    {/* Truy vấn/giây */}
+                    <div className="p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-12 h-12 bg-gradient-to-r from-orange-500 to-amber-600 rounded-lg flex items-center justify-center">
+                            <Zap className="h-6 w-6 text-white" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">Truy vấn/giây</p>
+                            <p className="text-2xl font-bold text-gray-900">156</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">Trung bình</p>
+                          <p className="text-sm font-medium text-orange-600">+12%</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Công cụ Quản lý Database */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Backup & Restore */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <FileCheck className="h-5 w-5 mr-2 text-cyan-600" />
+                      Backup & Restore
+                    </h4>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Backup Button */}
+                    <button className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white py-3 px-4 rounded-xl hover:from-cyan-600 hover:to-cyan-700 transition-all duration-200 shadow-md hover:shadow-lg">
+                      <Download className="h-5 w-5" />
+                      <span className="font-medium">Sao lưu dữ liệu</span>
+                    </button>
+
+                    {/* Restore Button */}
+                    <button className="w-full flex items-center justify-center space-x-2 bg-gray-100 text-gray-700 py-3 px-4 rounded-xl hover:bg-gray-200 transition-all duration-200">
+                      <RotateCcw className="h-5 w-5" />
+                      <span className="font-medium">Khôi phục dữ liệu</span>
+                    </button>
+
+                    {/* Backup History */}
+                    <div className="mt-4 pt-4 border-t border-gray-200">
+                      <p className="text-sm font-semibold text-gray-700 mb-3">Lịch sử sao lưu</p>
+                      <div className="space-y-2 max-h-48 overflow-y-auto">
+                        <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-200">
+                          <div className="flex items-center space-x-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <div>
+                              <p className="text-xs font-medium text-gray-900">backup_2024_01_15.sql</p>
+                              <p className="text-xs text-gray-500">15/01/2024 14:30</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-green-600 font-medium">2.3 GB</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-200">
+                          <div className="flex items-center space-x-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <div>
+                              <p className="text-xs font-medium text-gray-900">backup_2024_01_14.sql</p>
+                              <p className="text-xs text-gray-500">14/01/2024 14:30</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-green-600 font-medium">2.2 GB</span>
+                        </div>
+                        <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg border border-green-200">
+                          <div className="flex items-center space-x-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <div>
+                              <p className="text-xs font-medium text-gray-900">backup_2024_01_13.sql</p>
+                              <p className="text-xs text-gray-500">13/01/2024 14:30</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-green-600 font-medium">2.1 GB</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tối ưu hóa */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <Zap className="h-5 w-5 mr-2 text-cyan-600" />
+                      Tối ưu hóa
+                    </h4>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Clean Temp Tables */}
+                    <button className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 hover:shadow-md transition-all">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
+                          <Trash2 className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-medium text-gray-900">Dọn dẹp bảng tạm</p>
+                          <p className="text-xs text-gray-600">Xóa dữ liệu tạm thời</p>
+                        </div>
+                      </div>
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-medium">3 bảng</span>
+                    </button>
+
+                    {/* Optimize Index */}
+                    <button className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200 hover:shadow-md transition-all">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
+                          <Gauge className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-medium text-gray-900">Tối ưu Index</p>
+                          <p className="text-xs text-gray-600">Cải thiện hiệu suất</p>
+                        </div>
+                      </div>
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full font-medium">12 index</span>
+                    </button>
+
+                    {/* Defragment Data */}
+                    <button className="w-full flex items-center justify-between p-4 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl border border-orange-200 hover:shadow-md transition-all">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+                          <Layers className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-medium text-gray-900">Phân mảnh dữ liệu</p>
+                          <p className="text-xs text-gray-600">Tối ưu lưu trữ</p>
+                        </div>
+                      </div>
+                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium">8%</span>
+                    </button>
+
+                    {/* Run All Optimization */}
+                    <button className="w-full mt-4 flex items-center justify-center space-x-2 bg-gradient-to-r from-cyan-500 to-cyan-600 text-white py-3 px-4 rounded-xl hover:from-cyan-600 hover:to-cyan-700 transition-all duration-200 shadow-md hover:shadow-lg">
+                      <Zap className="h-5 w-5" />
+                      <span className="font-medium">Chạy tất cả tối ưu hóa</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Logs & Monitoring */}
+                <div className="bg-white rounded-2xl shadow-lg p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <Terminal className="h-5 w-5 mr-2 text-cyan-600" />
+                      Logs & Monitoring
+                    </h4>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {/* Slow Queries */}
+                    <div className="p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-2">
+                          <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                          <p className="font-medium text-gray-900">Truy vấn chậm</p>
+                        </div>
+                        <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">5</span>
+                      </div>
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
+                        <div className="text-xs bg-white p-2 rounded border border-yellow-100">
+                          <p className="font-medium text-gray-900">SELECT * FROM users...</p>
+                          <p className="text-gray-500">Thời gian: 2.5s</p>
+                        </div>
+                        <div className="text-xs bg-white p-2 rounded border border-yellow-100">
+                          <p className="font-medium text-gray-900">JOIN messages...</p>
+                          <p className="text-gray-500">Thời gian: 1.8s</p>
+                        </div>
+                      </div>
+                      <button className="w-full mt-2 text-xs text-yellow-700 hover:text-yellow-800 font-medium">
+                        Xem tất cả →
+                      </button>
+                    </div>
+
+                    {/* Connection Warnings */}
+                    <div className="p-4 bg-red-50 rounded-xl border border-red-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          <AlertCircle className="h-5 w-5 text-red-600" />
+                          <p className="font-medium text-gray-900">Cảnh báo</p>
+                        </div>
+                        <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">2</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="text-xs bg-white p-2 rounded border border-red-100">
+                          <p className="font-medium text-gray-900">Kết nối chậm</p>
+                          <p className="text-gray-500">Latency: 150ms</p>
+                        </div>
+                        <div className="text-xs bg-white p-2 rounded border border-red-100">
+                          <p className="font-medium text-gray-900">Pool gần đầy</p>
+                          <p className="text-gray-500">80/100 connections</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* View All Logs */}
+                    <button className="w-full flex items-center justify-center space-x-2 bg-gray-100 text-gray-700 py-2 px-4 rounded-xl hover:bg-gray-200 transition-all duration-200">
+                      <History className="h-4 w-4" />
+                      <span className="text-sm font-medium">Xem tất cả logs</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
