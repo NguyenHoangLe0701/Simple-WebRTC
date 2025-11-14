@@ -398,6 +398,83 @@ blockquote footer:before {
     }
 }
 
+/* Custom styled range input used on Pricing page */
+.styled-range {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 10px;
+    background: transparent;
+    transition: background 160ms linear;
+}
+
+/* WebKit track */
+.styled-range::-webkit-slider-runnable-track {
+    height: 10px;
+    background: #e6e6e6;
+    border-radius: 999px;
+}
+
+.styled-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    margin-top: -6px; /* center the thumb */
+    width: 18px;
+    height: 18px;
+    background: #3b82f6; /* blue */
+    border-radius: 999px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    border: 3px solid #ffffff;
+}
+
+/* Firefox */
+.styled-range::-moz-range-track {
+    height: 10px;
+    background: #e6e6e6;
+    border-radius: 999px;
+}
+.styled-range::-moz-range-progress {
+    height: 10px;
+    background: #3b82f6;
+    border-radius: 999px;
+}
+.styled-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    background: #3b82f6;
+    border-radius: 999px;
+    border: 3px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+/* IE/Edge */
+.styled-range::-ms-track {
+    width: 100%;
+    height: 10px;
+    background: transparent;
+    border-color: transparent;
+    color: transparent;
+}
+.styled-range::-ms-fill-lower {
+    background: #3b82f6;
+    border-radius: 999px;
+}
+.styled-range::-ms-fill-upper {
+    background: #e6e6e6;
+    border-radius: 999px;
+}
+.styled-range::-ms-thumb {
+    width: 18px;
+    height: 18px;
+    background: #3b82f6;
+    border-radius: 999px;
+    border: 3px solid #ffffff;
+}
+
+/* reduce outline on focus */
+.styled-range:focus {
+    outline: none;
+}
+
+
 ul,ol {
     margin: 0 0 30px 0;
     padding-left: 30px
@@ -2302,7 +2379,7 @@ section h2,section h3 {
     background: #efefef;
     border-radius: 15px;
     cursor: pointer;
-    color: $text-grey
+    color: #505658;
 }
 
 #pricing .plan-toggle > div {

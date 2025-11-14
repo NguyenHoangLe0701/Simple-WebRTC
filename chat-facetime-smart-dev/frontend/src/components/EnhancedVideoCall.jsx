@@ -3,7 +3,7 @@ import socketService from '../services/socket';
 import webrtcService from '../services/webrtc.service';
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Monitor, Users, Camera, CameraOff } from 'lucide-react';
 
-const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
+const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType = 'video' }) => {
   const localVideoRef = useRef(null);
   const cleanupInProgress = useRef(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -18,6 +18,9 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
   const [permissionStatus, setPermissionStatus] = useState('idle'); // idle -> requesting -> granted/denied
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  
+  // 🆕 FIX: Xác định loại call (video hoặc voice)
+  const isVideoCall = callType === 'video';
 
   // 🆕 FIX: Kiểm tra WebRTC support - chỉ chạy 1 lần
   useEffect(() => {
@@ -100,27 +103,37 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   }, [isActive, localStream, roomId, permissionStatus]);
 
-  // 🆕 FIX: Hàm request media permission đơn giản hơn
+  // 🆕 FIX: Hàm request media permission đơn giản hơn - chỉ xin audio cho voice call
   const requestMediaPermission = async () => {
     try {
-      console.log('🎥 Requesting media permissions...');
+      console.log(`🎥 Requesting media permissions for ${isVideoCall ? 'video' : 'voice'} call...`);
       setPermissionStatus('requesting');
       setShowPermissionModal(false);
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        },
+      // 🆕 FIX: Chỉ xin audio cho voice call, xin cả video và audio cho video call
+      const constraints = {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true
         }
-      });
+      };
 
-      console.log('✅ Media permissions granted');
+      // Chỉ thêm video constraints nếu là video call
+      if (isVideoCall) {
+        constraints.video = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        };
+      } else {
+        // Voice call: không xin video
+        constraints.video = false;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+      console.log(`✅ Media permissions granted for ${isVideoCall ? 'video' : 'voice'} call`);
       setPermissionStatus('granted');
       setLocalStream(stream);
       setIsInitialized(true);
@@ -129,11 +142,12 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       console.error('❌ Media permission error:', error);
       setPermissionStatus('denied');
       
-      let errorMessage = 'Không thể truy cập camera/microphone. ';
+      const deviceType = isVideoCall ? 'camera/microphone' : 'microphone';
+      let errorMessage = `Không thể truy cập ${deviceType}. `;
       if (error.name === 'NotAllowedError') {
         errorMessage += 'Bạn đã từ chối cấp quyền. Vui lòng cho phép trong trình duyệt.';
       } else if (error.name === 'NotFoundError') {
-        errorMessage += 'Không tìm thấy camera/microphone.';
+        errorMessage += isVideoCall ? 'Không tìm thấy camera/microphone.' : 'Không tìm thấy microphone.';
       } else if (error.name === 'NotReadableError') {
         errorMessage += 'Thiết bị đang được sử dụng bởi ứng dụng khác.';
       }
@@ -410,6 +424,12 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
   };
 
   const toggleScreenShare = async () => {
+    // 🆕 FIX: Chỉ cho phép screen share trong video call
+    if (!isVideoCall) {
+      alert('Chia sẻ màn hình chỉ khả dụng trong cuộc gọi video.');
+      return;
+    }
+    
     try {
       if (isScreenSharing) {
         // Dừng chia sẻ màn hình, quay lại camera
@@ -418,8 +438,16 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         }
 
         const cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
+          video: {
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
         });
 
         setLocalStream(cameraStream);
@@ -469,7 +497,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     }
   };
 
-  // 🆕 FIX: Video Grid Component
+  // 🆕 FIX: Video Grid Component - hỗ trợ cả video và voice call
   const VideoGrid = () => {
     const totalParticipants = 1 + participants.length; // Local + remote
     const remoteVideos = Array.from(remoteStreams.entries());
@@ -489,18 +517,29 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     return (
       <div className="flex-1 bg-gray-900 p-4 overflow-auto">
         <div className={`grid ${getGridConfig()} gap-4 h-full`}>
-          {/* Local Video */}
+          {/* Local Video/Audio */}
           <div className={`relative bg-black rounded-xl overflow-hidden border-2 ${isScreenSharing ? 'border-yellow-500' : 'border-blue-500'} ${getVideoSize()}`}>
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-full object-cover"
-            />
-            {isVideoOff && (
-              <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
-                <VideoOff className="h-12 w-12 text-gray-500" />
+            {isVideoCall && localStream?.getVideoTracks().length > 0 ? (
+              <>
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                {isVideoOff && (
+                  <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+                    <VideoOff className="h-12 w-12 text-gray-500" />
+                  </div>
+                )}
+              </>
+            ) : (
+              // Voice call: hiển thị avatar thay vì video
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
+                <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-white text-4xl font-bold">
+                  {(currentUser?.fullName || currentUser?.username || 'U').charAt(0).toUpperCase()}
+                </div>
               </div>
             )}
             <div className="absolute bottom-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium">
@@ -513,21 +552,32 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
             )}
           </div>
 
-          {/* Remote Videos */}
+          {/* Remote Videos/Audio */}
           {remoteVideos.map(([userId, stream]) => {
             const participant = participants.find(p => p.id === userId);
+            const hasVideo = stream.getVideoTracks().length > 0;
+            
             return (
               <div key={userId} className={`relative bg-black rounded-xl overflow-hidden border-2 border-green-500 ${getVideoSize()}`}>
-                <video
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                  ref={(videoRef) => {
-                    if (videoRef && videoRef.srcObject !== stream) {
-                      videoRef.srcObject = stream;
-                    }
-                  }}
-                />
+                {hasVideo ? (
+                  <video
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                    ref={(videoRef) => {
+                      if (videoRef && videoRef.srcObject !== stream) {
+                        videoRef.srcObject = stream;
+                      }
+                    }}
+                  />
+                ) : (
+                  // Voice call: hiển thị avatar
+                  <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-blue-600 flex items-center justify-center">
+                    <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-white text-4xl font-bold">
+                      {(participant?.fullName || participant?.username || 'U').charAt(0).toUpperCase()}
+                    </div>
+                  </div>
+                )}
                 <div className="absolute bottom-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium">
                   👥 {participant?.fullName || 'Remote'}
                 </div>
@@ -548,7 +598,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
       <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
         <div className="bg-gray-800 rounded-2xl max-w-md w-full p-8 text-center border border-gray-600">
           <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Camera className="h-10 w-10 text-blue-400" />
+            {isVideoCall ? (
+              <Camera className="h-10 w-10 text-blue-400" />
+            ) : (
+              <Mic className="h-10 w-10 text-blue-400" />
+            )}
           </div>
           
           <h3 className="text-2xl font-bold text-white mb-3">
@@ -556,7 +610,9 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
           </h3>
           
           <p className="text-gray-300 mb-8 text-lg">
-            Để tham gia cuộc gọi video, vui lòng cho phép truy cập camera và microphone.
+            {isVideoCall 
+              ? 'Để tham gia cuộc gọi video, vui lòng cho phép truy cập camera và microphone.'
+              : 'Để tham gia cuộc gọi thoại, vui lòng cho phép truy cập microphone.'}
           </p>
 
           <div className="flex space-x-4">
@@ -574,8 +630,17 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
               onClick={requestMediaPermission}
               className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all font-medium flex items-center justify-center space-x-2"
             >
-              <Camera className="h-5 w-5" />
-              <span>Cho phép</span>
+              {isVideoCall ? (
+                <>
+                  <Camera className="h-5 w-5" />
+                  <span>Cho phép</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="h-5 w-5" />
+                  <span>Cho phép</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -600,7 +665,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
         <div className="text-center text-white">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <h3 className="text-xl font-semibold mb-2">Đang kết nối...</h3>
-          <p className="text-gray-400">Đang yêu cầu quyền truy cập camera và microphone</p>
+          <p className="text-gray-400">
+            {isVideoCall 
+              ? 'Đang yêu cầu quyền truy cập camera và microphone'
+              : 'Đang yêu cầu quyền truy cập microphone'}
+          </p>
         </div>
       </div>
     );
@@ -611,10 +680,16 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
     return (
       <div className="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center">
         <div className="bg-gray-800 rounded-2xl p-8 max-w-md text-center border border-gray-600">
-          <CameraOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          {isVideoCall ? (
+            <CameraOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          ) : (
+            <MicOff className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          )}
           <h3 className="text-xl font-semibold text-white mb-2">Không thể truy cập</h3>
           <p className="text-gray-400 mb-6">
-            Cần cấp quyền camera và microphone để tham gia cuộc gọi.
+            {isVideoCall 
+              ? 'Cần cấp quyền camera và microphone để tham gia cuộc gọi.'
+              : 'Cần cấp quyền microphone để tham gia cuộc gọi.'}
           </p>
           <button
             onClick={onEndCall}
@@ -673,27 +748,32 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser }) => {
             {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
           </button>
 
-          <button
-            onClick={toggleVideo}
-            className={`p-4 rounded-full transition-all ${
-              isVideoOff 
-                ? 'bg-red-500 text-white shadow-lg' 
-                : 'bg-gray-600 text-white hover:bg-gray-500'
-            }`}
-          >
-            {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
-          </button>
+          {/* Chỉ hiển thị nút video và screen share trong video call */}
+          {isVideoCall && (
+            <>
+              <button
+                onClick={toggleVideo}
+                className={`p-4 rounded-full transition-all ${
+                  isVideoOff 
+                    ? 'bg-red-500 text-white shadow-lg' 
+                    : 'bg-gray-600 text-white hover:bg-gray-500'
+                }`}
+              >
+                {isVideoOff ? <VideoOff className="h-6 w-6" /> : <Video className="h-6 w-6" />}
+              </button>
 
-          <button
-            onClick={toggleScreenShare}
-            className={`p-4 rounded-full transition-all ${
-              isScreenSharing 
-                ? 'bg-yellow-500 text-white shadow-lg' 
-                : 'bg-gray-600 text-white hover:bg-gray-500'
-            }`}
-          >
-            <Monitor className="h-6 w-6" />
-          </button>
+              <button
+                onClick={toggleScreenShare}
+                className={`p-4 rounded-full transition-all ${
+                  isScreenSharing 
+                    ? 'bg-yellow-500 text-white shadow-lg' 
+                    : 'bg-gray-600 text-white hover:bg-gray-500'
+                }`}
+              >
+                <Monitor className="h-6 w-6" />
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

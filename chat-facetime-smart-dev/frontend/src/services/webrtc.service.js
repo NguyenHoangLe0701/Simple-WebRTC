@@ -199,17 +199,20 @@ class WebRTCService {
       }
     }
   
-    async createOffer(userId) {
-      try {
-        console.log('🎯 Creating offer for:', userId);
-        const pc = this.createPeerConnection(userId);
-        
-        const offerOptions = {
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: true,
-          voiceActivityDetection: false,
-          iceRestart: false
-        };
+  async createOffer(userId) {
+    try {
+      console.log('🎯 Creating offer for:', userId);
+      const pc = this.createPeerConnection(userId);
+      
+      // 🆕 FIX: Chỉ yêu cầu video nếu localStream có video track
+      const hasVideo = this.localStream && this.localStream.getVideoTracks().length > 0;
+      
+      const offerOptions = {
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: hasVideo, // Chỉ yêu cầu video nếu có video track
+        voiceActivityDetection: false,
+        iceRestart: false
+      };
   
         const offer = await pc.createOffer(offerOptions);
 
