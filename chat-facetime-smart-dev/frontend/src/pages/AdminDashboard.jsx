@@ -71,7 +71,7 @@ import api from '../services/api';
 import UsersComponent from './admin/Users';
 import SecurityComponent from './admin/Security';
 import SettingsComponent from './admin/Settings';
-
+import SessionAnalytics from '../pages/admin/components/SessionAnalytics'
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
@@ -1207,7 +1207,7 @@ const AdminDashboard = () => {
                 <h3 className="text-2xl font-bold text-gray-900 mb-4">
                   {tabs.find(tab => tab.id === activeTab)?.name}
                 </h3>
-                <p className="text-gray-600 mb-6">Tính năng đang được phát triển</p>
+                <SessionAnalytics/>
               </div>
             </div>
           )}
