@@ -1,6 +1,6 @@
 // components/SessionAnalyticsIndividual.jsx
 import React, { useState, useEffect } from 'react';
-import { sessionAnalyticsService } from '../services/sessionAnalyticsService';
+import  {sessionAnalyticsService}  from '../../../services/sessionAnalyticsService.js';
 
 const SessionAnalyticsIndividual = () => {
   const [summary, setSummary] = useState(null);

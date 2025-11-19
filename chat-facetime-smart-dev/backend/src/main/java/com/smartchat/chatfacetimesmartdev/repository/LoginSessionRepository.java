@@ -14,7 +14,7 @@ import com.smartchat.chatfacetimesmartdev.entity.LoginSession;
 import com.smartchat.chatfacetimesmartdev.entity.LoginSession.SessionStatus;
 
 @Repository
-public interface LoginSessionRepository extends JpaRepository<LoginSession, Long> {
+public interface    LoginSessionRepository extends JpaRepository<LoginSession, Long> {
     
     Optional<LoginSession> findBySessionId(String sessionId);
     
@@ -45,5 +45,11 @@ public interface LoginSessionRepository extends JpaRepository<LoginSession, Long
     @Modifying
     @Query("DELETE FROM LoginSession ls WHERE ls.status = :status AND ls.lastActivity < :deleteBefore")
     int deleteExpiredSessions(@Param("deleteBefore") LocalDateTime deleteBefore, @Param("status") SessionStatus status);
+
+    @Query("SELECT ls.ipAddress, COUNT(ls) FROM LoginSession ls WHERE ls.ipAddress IS NOT NULL GROUP BY ls.ipAddress ORDER BY COUNT(ls) DESC")
+    List<Object[]> findTopIpAddresses();
+
+    @Query("SELECT ls.deviceInfo, COUNT(ls) FROM LoginSession ls WHERE ls.deviceInfo IS NOT NULL GROUP BY ls.deviceInfo ORDER BY COUNT(ls) DESC")
+    List<Object[]> findTopDevices();
 }
 

@@ -1,6 +1,6 @@
 // components/SessionAnalytics.jsx
 import React, { useState, useEffect } from 'react';
-import sessionAnalyticsService from '../../../services/sessionAnalyticsService.js';
+import  {sessionAnalyticsService}  from '../../../services/sessionAnalyticsService.js';
 
 const SessionAnalytics = () => {
   const [analytics, setAnalytics] = useState(null);

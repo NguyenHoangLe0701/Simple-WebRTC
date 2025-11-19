@@ -71,7 +71,7 @@ import api from '../services/api';
 import UsersComponent from './admin/Users';
 import SecurityComponent from './admin/Security';
 import SettingsComponent from './admin/Settings';
-import SessionAnalytics from '../pages/admin/components/SessionAnalytics'
+import SessionAnalyticsEnhanced from '../pages/admin/components/SessionAnalyticsEnhanced'
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [users, setUsers] = useState([]);
@@ -1201,13 +1201,10 @@ const AdminDashboard = () => {
           {activeTab !== 'overview' && activeTab !== 'database' && activeTab !== 'rooms' && activeTab !== 'users' && activeTab !== 'security' && activeTab !== 'settings' && (
             <div className="bg-white rounded-2xl shadow-lg p-8">
               <div className="text-center">
-                <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Settings className="h-10 w-10 text-white" />
-                </div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-4">
                   {tabs.find(tab => tab.id === activeTab)?.name}
                 </h3>
-                <SessionAnalytics/>
+                <SessionAnalyticsEnhanced/>
               </div>
             </div>
           )}
