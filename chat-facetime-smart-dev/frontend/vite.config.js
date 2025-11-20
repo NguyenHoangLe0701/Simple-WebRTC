@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
     // Thêm __API_URL__ vào khối này
     __API_URL__: JSON.stringify(
       mode === 'production'
-        ? 'https://simple-webrtc-4drq.onrender.com'
+        ? 'https://simple-webrtc-dockerservice.onrender.com'
         : 'http://localhost:8080'
     ),
   },
