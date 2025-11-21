@@ -31,7 +31,7 @@ class SocketService {
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         wsUrl = 'http://localhost:8080/ws';
       } else {
-        wsUrl = 'https://simple-webrtc-4drq.onrender.com/ws';
+        wsUrl = 'https://simple-webrtc-dockerservice.onrender.com/ws';
       }
 
       console.log('🔗 Connecting to WebSocket:', wsUrl); 
