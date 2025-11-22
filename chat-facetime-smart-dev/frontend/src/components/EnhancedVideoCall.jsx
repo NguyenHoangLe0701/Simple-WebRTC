@@ -34,12 +34,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Effect chính - chỉ chạy khi isActive thay đổi
   useEffect(() => {
     if (isActive && !isInitialized) {
-      console.log('🚀 Starting video call initialization...');
       setShowPermissionModal(true);
     }
 
     if (!isActive && isInitialized) {
-      console.log('🛑 Stopping video call...');
       cleanup();
     }
   }, [isActive, isInitialized]);
@@ -48,11 +46,8 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   useEffect(() => {
     if (!isActive) return;
 
-    console.log('🔧 Setting up WebRTC event handlers...');
-
     // Setup WebRTC event handlers
     webrtcService.setOnRemoteStream((userId, stream) => {
-      console.log('🎯 Remote stream received for:', userId);
       setRemoteStreams(prev => {
         const newMap = new Map(prev);
         newMap.set(userId, stream);
@@ -61,7 +56,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     });
 
     webrtcService.setOnIceCandidate((userId, candidate) => {
-      console.log('🧊 Sending ICE candidate for:', userId);
       sendSignal({
         type: 'ice-candidate',
         candidate: candidate,
@@ -70,12 +64,10 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     });
 
     webrtcService.setOnConnectionStateChange((userId, state) => {
-      console.log(`🔗 Connection state for ${userId}:`, state);
       setConnectionStatus(state);
     });
 
     return () => {
-      console.log('🧹 Cleaning up WebRTC event handlers...');
       webrtcService.setOnRemoteStream(null);
       webrtcService.setOnIceCandidate(null);
       webrtcService.setOnConnectionStateChange(null);
@@ -85,7 +77,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Set local stream cho WebRTC service
   useEffect(() => {
     if (localStream) {
-      console.log('🎥 Setting local stream for WebRTC service');
       webrtcService.setLocalStream(localStream);
       
       // Update local video
@@ -98,48 +89,76 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Khởi tạo signaling khi có local stream và room
   useEffect(() => {
     if (isActive && localStream && roomId && permissionStatus === 'granted') {
-      console.log('📡 Initializing signaling...');
       initializeSignaling();
     }
   }, [isActive, localStream, roomId, permissionStatus]);
 
-  // 🆕 FIX: Hàm request media permission đơn giản hơn - chỉ xin audio cho voice call
+  // 🆕 FIX: Hàm request media permission với fallback audio-only khi camera lỗi
   const requestMediaPermission = async () => {
     try {
-      console.log(`🎥 Requesting media permissions for ${isVideoCall ? 'video' : 'voice'} call...`);
       setPermissionStatus('requesting');
       setShowPermissionModal(false);
 
-      // 🆕 FIX: Chỉ xin audio cho voice call, xin cả video và audio cho video call
-      const constraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      };
+      let stream = null;
+      let hasVideo = false;
 
-      // Chỉ thêm video constraints nếu là video call
+      // Nếu là video call, thử lấy cả video và audio
       if (isVideoCall) {
-        constraints.video = {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        };
+        try {
+          const videoConstraints = {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            },
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 }
+            }
+          };
+          stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
+          hasVideo = stream.getVideoTracks().length > 0;
+        } catch (videoError) {
+          // Nếu video lỗi, thử fallback chỉ audio
+          if (videoError.name === 'NotFoundError' || videoError.name === 'NotReadableError' || videoError.name === 'OverconstrainedError') {
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                  autoGainControl: true
+                },
+                video: false
+              });
+              hasVideo = false;
+            } catch (audioError) {
+              // Nếu cả audio cũng lỗi, throw error
+              throw audioError;
+            }
+          } else {
+            throw videoError;
+          }
+        }
       } else {
-        // Voice call: không xin video
-        constraints.video = false;
+        // Voice call: chỉ xin audio
+        const constraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        hasVideo = false;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      console.log(`✅ Media permissions granted for ${isVideoCall ? 'video' : 'voice'} call`);
       setPermissionStatus('granted');
       setLocalStream(stream);
       setIsInitialized(true);
 
     } catch (error) {
-      console.error('❌ Media permission error:', error);
       setPermissionStatus('denied');
       
       const deviceType = isVideoCall ? 'camera/microphone' : 'microphone';
@@ -160,30 +179,24 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Hàm khởi tạo signaling đơn giản hơn
   const initializeSignaling = async () => {
     if (!isActive || !roomId || !localStream) {
-      console.log('⚠️ Cannot initialize signaling - missing requirements');
       return;
     }
 
     try {
-      console.log('🚀 Starting signaling initialization...');
       setConnectionStatus('connecting');
 
       // Kết nối socket
       if (!socketService.isConnected) {
-        console.log('🔌 Connecting to socket...');
         await socketService.connect();
       }
 
       // Subscribe to signaling
-      console.log('📡 Subscribing to signaling...');
       await socketService.subscribeToSignaling(roomId, handleSignalingMessage);
 
       // Join room
-      console.log('👤 Joining room...');
       await socketService.joinRoomWithSignaling(roomId, currentUser);
 
       setConnectionStatus('connected');
-      console.log('✅ Signaling initialized successfully');
 
     } catch (error) {
       console.error('❌ Signaling initialization error:', error);
@@ -192,7 +205,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       // Thử kết nối lại sau 3s
       setTimeout(() => {
         if (isActive && connectionStatus !== 'connected') {
-          console.log('🔄 Retrying signaling initialization...');
           initializeSignaling();
         }
       }, 3000);
@@ -219,7 +231,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         timestamp: Date.now()
       };
 
-      console.log('📤 Sending signal:', signal.type, 'to:', signal.targetUserId);
       await socketService.sendSignal(roomId, signalData);
       return true;
 
@@ -238,8 +249,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     if (senderId === currentUserId) {
       return;
     }
-
-    console.log('📨 Received signal:', data.type, 'from:', senderId);
 
     try {
       switch (data.type) {
@@ -262,9 +271,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         case 'leave':
           handleUserLeave(data.user);
           break;
-          
-        default:
-          console.warn('⚠️ Unknown signal type:', data.type);
       }
     } catch (error) {
       console.error('❌ Error handling signal:', error);
@@ -274,7 +280,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Xử lý user join
   const handleUserJoin = async (user) => {
     const userId = user.id;
-    console.log('👤 User joined:', userId);
 
     // Thêm vào participants
     setParticipants(prev => {
@@ -285,14 +290,15 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
     // Tạo offer cho user mới
     try {
-      console.log('🎯 Creating offer for new user:', userId);
       const offer = await webrtcService.createOffer(userId);
       
-      await sendSignal({
-        type: 'offer',
-        offer: offer,
-        targetUserId: userId
-      });
+      if (offer) {
+        await sendSignal({
+          type: 'offer',
+          offer: offer,
+          targetUserId: userId
+        });
+      }
       
     } catch (error) {
       console.error('❌ Create offer error:', error);
@@ -302,31 +308,37 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Xử lý offer
   const handleOffer = async (data) => {
     const userId = data.user?.id;
-    console.log('📥 Handling offer from:', userId);
 
     try {
       const answer = await webrtcService.handleOffer(userId, data.offer);
       
-      await sendSignal({
-        type: 'answer', 
-        answer: answer,
-        targetUserId: userId
-      });
+      if (answer) {
+        await sendSignal({
+          type: 'answer', 
+          answer: answer,
+          targetUserId: userId
+        });
+      }
       
     } catch (error) {
-      console.error('❌ Handle offer error:', error);
+      // Chỉ log lỗi thực sự, bỏ qua InvalidStateError khi state là stable
+      if (error.name !== 'InvalidStateError' || error.message?.includes('stable')) {
+        console.error('❌ Handle offer error:', error);
+      }
     }
   };
 
   // 🆕 FIX: Xử lý answer
   const handleAnswer = async (data) => {
     const userId = data.user?.id;
-    console.log('📥 Handling answer from:', userId);
     
     try {
       await webrtcService.handleAnswer(userId, data.answer);
     } catch (error) {
-      console.error('❌ Handle answer error:', error);
+      // Chỉ log lỗi thực sự, bỏ qua InvalidStateError khi state là stable
+      if (error.name !== 'InvalidStateError' || error.message?.includes('stable')) {
+        console.error('❌ Handle answer error:', error);
+      }
     }
   };
 
@@ -337,14 +349,13 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     try {
       await webrtcService.handleIceCandidate(userId, data.candidate);
     } catch (error) {
-      console.error('❌ Handle ICE candidate error:', error);
+      // Bỏ qua lỗi thông thường của ICE candidate
     }
   };
 
   // 🆕 FIX: Xử lý user leave
   const handleUserLeave = (user) => {
     const userId = user.id;
-    console.log('👋 User left:', userId);
 
     // Xóa khỏi participants
     setParticipants(prev => prev.filter(p => p.id !== userId));
@@ -365,8 +376,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     if (cleanupInProgress.current) return;
     cleanupInProgress.current = true;
 
-    console.log('🧹 Starting cleanup...');
-
     // Dừng local stream
     if (localStream) {
       localStream.getTracks().forEach(track => {
@@ -380,8 +389,8 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
     // Gửi leave signal
     if (socketService.isConnected && roomId) {
-      sendSignal({ type: 'leave' }).catch(console.error);
-      socketService.leaveRoom(roomId, currentUser?.username).catch(console.error);
+      sendSignal({ type: 'leave' }).catch(() => {});
+      socketService.leaveRoom(roomId, currentUser?.username).catch(() => {});
     }
 
     // Reset state
@@ -393,7 +402,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     setShowPermissionModal(false);
 
     cleanupInProgress.current = false;
-    console.log('✅ Cleanup completed');
   };
 
   // 🆕 FIX: Toggle functions đơn giản hơn
