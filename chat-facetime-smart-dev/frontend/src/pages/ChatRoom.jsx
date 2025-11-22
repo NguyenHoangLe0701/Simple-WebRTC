@@ -90,7 +90,10 @@ const ChatRoom = () => {
     if (!messageId) return;
     
     try {
-      console.log(`🗑️ Deleting message: ${messageId} in room ${roomId}`);
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🗑️ Deleting message: ${messageId} in room ${roomId}`);
+      }
       
       // Optimistic update (chỉ cho user hiện tại để UX tốt hơn)
       // Server sẽ broadcast message DELETE về cho TẤT CẢ user, kể cả user này
@@ -98,7 +101,6 @@ const ChatRoom = () => {
       
       // Gửi lệnh xóa qua socket - Server sẽ broadcast về cho TẤT CẢ user
       await socketService.sendDeleteMessage(roomId, messageId);
-      console.log('✅ Delete message sent successfully - Server will broadcast to all users');
       
     } catch (error) {
       console.error('❌ Error deleting message:', error);
@@ -112,7 +114,10 @@ const ChatRoom = () => {
     if (!messageId || !newContent.trim()) return;
     
     try {
-      console.log(`✏️ Editing message: ${messageId} in room ${roomId}`);
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✏️ Editing message: ${messageId} in room ${roomId}`);
+      }
       
       // Optimistic update (chỉ cho user hiện tại để UX tốt hơn)
       // Server sẽ broadcast message EDIT về cho TẤT CẢ user, kể cả user này
@@ -122,7 +127,6 @@ const ChatRoom = () => {
       
       // Gửi lệnh chỉnh sửa qua socket - Server sẽ broadcast về cho TẤT CẢ user
       await socketService.sendEditMessage(roomId, messageId, newContent.trim());
-      console.log('✅ Edit message sent successfully - Server will broadcast to all users');
       
       setEditingMessageId(null);
       setEditingContent('');
@@ -145,13 +149,17 @@ const ChatRoom = () => {
     setEditingContent('');
   };
 
-  // 🆕 THÊM DEBUG EFFECTS
+  // 🆕 THÊM DEBUG EFFECTS - Chỉ trong development mode
   useEffect(() => {
-    console.log('🔍 Current user:', currentUser);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Current user:', currentUser);
+    }
   }, [currentUser]);
 
   useEffect(() => {
-    console.log('🔍 Online users:', onlineUsers);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Online users:', onlineUsers);
+    }
   }, [onlineUsers]);
 
   useEffect(() => {
@@ -167,7 +175,10 @@ const ChatRoom = () => {
     
     const initializeSocket = async () => {
       try {
-        console.log('🔄 Initializing socket connection...');
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔄 Initializing socket connection...');
+        }
         
         const connected = await socketService.ensureConnected();
         
@@ -296,18 +307,26 @@ const ChatRoom = () => {
               return;
             }
             
-            console.log('✏️ [USER 2] Edit message received from server:', messageId, 'New content:', newContent.substring(0, 50) + '...', 'Full data:', JSON.stringify(messageData));
+            // Chỉ log trong development mode
+            if (process.env.NODE_ENV === 'development') {
+              console.log('✏️ [USER 2] Edit message received from server:', messageId, 'New content:', newContent.substring(0, 50) + '...', 'Full data:', JSON.stringify(messageData));
+            }
             setMessages(prev => {
               const found = prev.find(m => m.id === messageId);
               if (!found) {
-                console.warn(`⚠️ [USER 2] Edit message received but message ${messageId} not found in state (user may have just joined)`);
-                console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn(`⚠️ [USER 2] Edit message received but message ${messageId} not found in state (user may have just joined)`);
+                  console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+                }
                 return prev; // Không làm gì nếu message không tồn tại
               }
               
               const updated = prev.map(m => {
                 if (m.id === messageId) {
-                  console.log(`✏️ [USER 2] ✅ Updating message ${m.id} with new content: ${newContent}`);
+                  // Chỉ log trong development mode
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log(`✏️ [USER 2] ✅ Updating message ${m.id} with new content: ${newContent}`);
+                  }
                   return { ...m, content: newContent };
                 }
                 return m;
@@ -334,18 +353,26 @@ const ChatRoom = () => {
               return;
             }
             
-            console.log('😀 [USER 2] Reaction message received from server:', messageId, 'Emoji:', emoji, 'Reactions:', reactions);
+            // Chỉ log trong development mode
+            if (process.env.NODE_ENV === 'development') {
+              console.log('😀 [USER 2] Reaction message received from server:', messageId, 'Emoji:', emoji, 'Reactions:', reactions);
+            }
             setMessages(prev => {
               const found = prev.find(m => m.id === messageId);
               if (!found) {
-                console.warn(`⚠️ [USER 2] Reaction message received but message ${messageId} not found in state`);
-                console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn(`⚠️ [USER 2] Reaction message received but message ${messageId} not found in state`);
+                  console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+                }
                 return prev;
               }
               
               const updated = prev.map(m => {
                 if (m.id === messageId) {
-                  console.log(`😀 [USER 2] Updating reactions for message ${m.id} with emoji ${emoji}`);
+                  // Chỉ log trong development mode
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log(`😀 [USER 2] Updating reactions for message ${m.id} with emoji ${emoji}`);
+                  }
                   // Merge reactions: nếu có reactions từ server thì dùng, nếu không thì merge với reactions hiện tại
                   const currentReactions = m.reactions || {};
                   const serverReactions = reactions || {};
@@ -358,7 +385,10 @@ const ChatRoom = () => {
                     mergedReactions[emoji] = (mergedReactions[emoji] || 0) + 1;
                   }
                   
-                  console.log(`😀 [USER 2] Merged reactions:`, mergedReactions);
+                  // Chỉ log trong development mode
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log(`😀 [USER 2] Merged reactions:`, mergedReactions);
+                  }
                   return { ...m, reactions: mergedReactions };
                 }
                 return m;
@@ -475,10 +505,16 @@ const ChatRoom = () => {
           email: currentUser?.email || ''
         };
 
-        console.log('👤 Joining room with user data:', userData);
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('👤 Joining room with user data:', userData);
+        }
         
         await socketService.joinRoom(roomId, userData);
-        console.log('✅ Successfully joined room:', roomId);
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Successfully joined room:', roomId);
+        }
         
       } catch (error) {
         console.error('❌ Error in socket setup:', error);
@@ -493,11 +529,17 @@ const ChatRoom = () => {
       if (cleanupCalled) return;
       cleanupCalled = true;
       
-      console.log('🧹 Cleaning up socket connections...');
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🧹 Cleaning up socket connections...');
+      }
       const cleanup = async () => {
         try {
           const username = currentUser?.fullName || currentUser?.username || 'User';
-          console.log('🚪 Leaving room:', roomId, 'as', username);
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🚪 Leaving room:', roomId, 'as', username);
+          }
           await socketService.leaveRoom(roomId, username);
         } catch (e) {
           console.warn('⚠️ Error during cleanup (ignored):', e);
@@ -508,7 +550,10 @@ const ChatRoom = () => {
         if (presenceSub) socketService.unsubscribe(`/topic/presence/${roomId}`);
         // 🚫 KHÔNG UNSUBSCRIBE SIGNALING Ở ĐÂY
         
-        console.log('✅ Cleanup completed');
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Cleanup completed');
+        }
       };
       
       cleanup();
@@ -601,7 +646,10 @@ const ChatRoom = () => {
       } : null
     };
     
-    console.log('📤 Sending message to backend:', message);
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📤 Sending message to backend:', message);
+    }
     
     // Optimistic update
     setMessages(prev => {
@@ -611,7 +659,10 @@ const ChatRoom = () => {
     
     try {
       await socketService.sendMessage(roomId, message);
-      console.log('✅ Message sent successfully');
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Message sent successfully');
+      }
     } catch (err) {
       console.error('❌ Error sending message:', err);
       // Rollback optimistic update
@@ -645,7 +696,10 @@ const ChatRoom = () => {
     
     try {
       await socketService.sendMessage(roomId, message);
-      console.log('✅ Code message sent successfully');
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Code message sent successfully');
+      }
     } catch (err) {
       console.error('❌ Error sending code message:', err);
       setMessages(prev => prev.filter(m => m.id !== messageId));
@@ -696,9 +750,12 @@ const ChatRoom = () => {
           roomId: roomId
         };
         
-        // Gửi qua socket
-        await socketService.sendMessage(roomId, message);
-        console.log('✅ File message sent successfully');
+      // Gửi qua socket
+      await socketService.sendMessage(roomId, message);
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ File message sent successfully');
+      }
         
         // Thêm vào UI (Optimistic update)
         setMessages(prev => [...prev, message]);
@@ -872,7 +929,10 @@ const ChatRoom = () => {
             // Gửi reaction lên server để broadcast cho tất cả user
             try {
               await socketService.sendReaction(roomId, message.id, emo);
-              console.log('✅ Reaction sent successfully');
+              // Chỉ log trong development mode
+              if (process.env.NODE_ENV === 'development') {
+                console.log('✅ Reaction sent successfully');
+              }
             } catch (error) {
               console.error('❌ Error sending reaction:', error);
               // Rollback optimistic update nếu cần

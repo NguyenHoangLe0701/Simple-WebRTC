@@ -15,9 +15,40 @@ public class DockerCodeExecutionService {
     private static final int EXECUTION_TIMEOUT_SECONDS = 30;
     // Image duy nhất cho sandbox
     private static final String EXECUTOR_IMAGE = "anhphu4784/code-executor:latest";
+    private static Boolean dockerAvailable = null; // Cache Docker availability check
+
+    // Kiểm tra Docker có sẵn không
+    private boolean isDockerAvailable() {
+        if (dockerAvailable != null) {
+            return dockerAvailable;
+        }
+        
+        try {
+            ProcessBuilder checkProcess = new ProcessBuilder("docker", "--version");
+            Process check = checkProcess.start();
+            boolean completed = check.waitFor(3, TimeUnit.SECONDS);
+            if (completed && check.exitValue() == 0) {
+                dockerAvailable = true;
+                return true;
+            }
+        } catch (Exception e) {
+            // Docker không có sẵn
+        }
+        
+        dockerAvailable = false;
+        return false;
+    }
 
     // Phương thức chung để thực thi code trong container
     private CodeExecutionResult executeInContainer(String[] command, String code, String fileName) {
+        // Kiểm tra Docker có sẵn không
+        if (!isDockerAvailable()) {
+            return new CodeExecutionResult("", 
+                "Docker không khả dụng. Vui lòng cài đặt Docker hoặc kiểm tra Docker daemon đang chạy.\n" +
+                "Lỗi: Cannot run program \"docker\": error=2, No such file or directory", 
+                false);
+        }
+        
         Process process = null;
         try {
             ProcessBuilder processBuilder = new ProcessBuilder(command);
@@ -48,6 +79,16 @@ public class DockerCodeExecutionService {
                 return new CodeExecutionResult(output, "Exit code: " + exitCode + "\nErrors: " + errors, false);
             }
 
+        } catch (IOException e) {
+            // Kiểm tra nếu lỗi là do Docker không tìm thấy
+            if (e.getMessage() != null && e.getMessage().contains("Cannot run program \"docker\"")) {
+                dockerAvailable = false; // Update cache
+                return new CodeExecutionResult("", 
+                    "Docker không khả dụng. Vui lòng cài đặt Docker hoặc kiểm tra Docker daemon đang chạy.\n" +
+                    "Lỗi: " + e.getMessage(), 
+                    false);
+            }
+            return new CodeExecutionResult("", "Execution error: " + e.getMessage(), false);
         } catch (Exception e) {
             return new CodeExecutionResult("", "Execution error: " + e.getMessage(), false);
         } finally {

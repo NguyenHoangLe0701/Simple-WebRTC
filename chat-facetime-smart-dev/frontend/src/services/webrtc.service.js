@@ -411,40 +411,52 @@ class WebRTCService {
 
   // Phương thức debug
   logConnectionStats() {
-    console.log('📊 WebRTC Connection Stats:', {
-      peerConnections: this.peerConnections.size,
-      remoteStreams: this.remoteStreams.size,
-      localStream: this.localStream ? 
-        this.localStream.getTracks().map(t => t.kind) : 'none',
-      roomId: this.roomId
-    });
-
-    this.peerConnections.forEach((pc, userId) => {
-      console.log(`👤 ${userId}:`, {
-        connectionState: pc.connectionState,
-        iceConnectionState: pc.iceConnectionState,
-        signalingState: pc.signalingState,
-        iceGatheringState: pc.iceGatheringState
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📊 WebRTC Connection Stats:', {
+        peerConnections: this.peerConnections.size,
+        remoteStreams: this.remoteStreams.size,
+        localStream: this.localStream ? 
+          this.localStream.getTracks().map(t => t.kind) : 'none',
+        roomId: this.roomId
       });
-    });
+
+      this.peerConnections.forEach((pc, userId) => {
+        console.log(`👤 ${userId}:`, {
+          connectionState: pc.connectionState,
+          iceConnectionState: pc.iceConnectionState,
+          signalingState: pc.signalingState,
+          iceGatheringState: pc.iceGatheringState
+        });
+      });
+    }
   }
 
   // Kiểm tra TURN server hoạt động
   checkTurnServerStatus() {
-    console.log('🔍 Checking TURN server configuration...');
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Checking TURN server configuration...');
+    }
     const testPc = new RTCPeerConnection(this.config);
     let relayCandidateFound = false;
 
     testPc.onicecandidate = (e) => {
       if (e.candidate) {
-        console.log('ICE Candidate:', e.candidate.candidate);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('ICE Candidate:', e.candidate.candidate);
+        }
         if (e.candidate.candidate.includes('relay')) {
           relayCandidateFound = true;
-          console.log('✅ TURN SERVER WORKING - Relay candidate found!');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('✅ TURN SERVER WORKING - Relay candidate found!');
+          }
         }
       } else {
-        console.log('ICE gathering complete');
-        console.log('Relay candidate found:', relayCandidateFound);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('ICE gathering complete');
+          console.log('Relay candidate found:', relayCandidateFound);
+        }
         testPc.close();
       }
     };

@@ -34,7 +34,10 @@ class SocketService {
         wsUrl = 'https://simple-webrtc-dockerservice.onrender.com/ws';
       }
 
-      console.log('🔗 Connecting to WebSocket:', wsUrl); 
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔗 Connecting to WebSocket:', wsUrl);
+      } 
 
       const socket = new SockJS(wsUrl);
 
@@ -57,7 +60,10 @@ class SocketService {
         },
         onConnect: () => {
           this.connected = true;
-          console.log('🟢 STOMP connected'); // Giữ log quan trọng
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🟢 STOMP connected');
+          }
           if (this.connectionTimeout) {
             clearTimeout(this.connectionTimeout);
             this.connectionTimeout = null;
@@ -75,12 +81,18 @@ class SocketService {
         },
         onDisconnect: () => {
           this.connected = false;
-          console.log('🔴 STOMP disconnected'); // Giữ log quan trọng
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔴 STOMP disconnected');
+          }
           this.connectionPromise = null;
         },
         onWebSocketClose: () => {
           this.connected = false;
-          console.log('🔌 WebSocket closed'); // Giữ log quan trọng
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('🔌 WebSocket closed');
+          }
           this.connectionPromise = null;
         },
         onWebSocketError: (error) => {
@@ -96,7 +108,7 @@ class SocketService {
 
       this.connectionTimeout = setTimeout(() => {
         if (!this.connected) {
-console.error('⏰ Connection timeout after 15s'); // Giữ log lỗi
+          console.error('⏰ Connection timeout after 15s'); // Giữ log lỗi
           reject(new Error('Connection timeout'));
           this.connectionPromise = null;
           
@@ -115,13 +127,22 @@ console.error('⏰ Connection timeout after 15s'); // Giữ log lỗi
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`🔗 Connection attempt ${attempt}/${maxRetries}`); // Giữ log retry
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔗 Connection attempt ${attempt}/${maxRetries}`);
+        }
         await this.connect();
-        console.log('✅ Connected successfully'); // Giữ log retry
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Connected successfully');
+        }
         return true;
       } catch (error) {
         lastError = error;
-        console.warn(`❌ Connection attempt ${attempt} failed:`, error.message); // Giữ log cảnh báo
+        // Chỉ log cảnh báo trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`❌ Connection attempt ${attempt} failed:`, error.message);
+        }
         
         if (attempt < maxRetries) {
           await new Promise(resolve => setTimeout(resolve, retryDelay));
@@ -173,7 +194,10 @@ console.error('⏰ Connection timeout after 15s'); // Giữ log lỗi
 
   async subscribeToSignaling(roomId, callback) {
     try {
-      console.log('📡 Subscribing to signaling for room:', roomId); // Giữ log quan trọng
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📡 Subscribing to signaling for room:', roomId);
+      }
       
       const subscription = await this.subscribe(`/topic/signal/${roomId}`, (message) => {
         try {
@@ -260,7 +284,10 @@ throw new Error('STOMP client not connected');
       });
 
       this.subscriptions.set(destination, sub);
-      console.log('✅ Subscribed to:', destination); // Giữ log quan trọng
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Subscribed to:', destination);
+      }
       return sub;
     } catch (error) {
       console.error('❌ Subscribe failed:', error); // Giữ log lỗi
@@ -286,11 +313,12 @@ throw new Error('STOMP client not connected');
         avatar: user.avatar || (user.fullName || user.username || 'U').charAt(0).toUpperCase()
       };
       
-      console.log('👤 Joining room with user data:', userData); // Giữ log quan trọng
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('👤 Joining room with user data:', userData);
+      }
       
       await this.send(`/app/room/${roomId}/join`, userData);
-      // 🔇 ĐÃ GIẢM BỚT LOG
-      // console.log('✅ Joined room:', roomId);
    } catch (error) {
       console.error('❌ Join room failed:', error); // Giữ log lỗi
       throw error;
@@ -311,7 +339,10 @@ throw new Error('STOMP client not connected');
         timestamp: new Date().toISOString()
       });
       
-      console.log('✅ Joined room with signaling:', roomId); // Giữ log quan trọng
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Joined room with signaling:', roomId);
+      }
       return true;
     } catch (error) {
 console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
@@ -325,7 +356,10 @@ console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
       
       if (onUserJoin || onUserLeave) {
         await this.subscribe(`/topic/room/${roomId}`, (message) => {
-          console.log('👥 Room event received:', message); // Giữ log quan trọng
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('👥 Room event received:', message);
+          }
           
           if (message.type === 'user_join' && onUserJoin) {
             onUserJoin(message.user);
@@ -341,7 +375,10 @@ console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
         });
       }
       
-      console.log('✅ Subscribed to all room events:', roomId); // Giữ log quan trọng
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Subscribed to all room events:', roomId);
+      }
       return true;
     } catch (error) {
       console.error('❌ Subscribe to room events failed:', error); // Giữ log lỗi
@@ -355,9 +392,10 @@ console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
         await this.send(`/app/room/${roomId}/leave`, { 
           username: username || 'anonymous' 
         });
-        console.log('✅ Left room:', roomId); // Giữ log quan trọng
-      } else {
-        console.log('ℹ️ Skip leave room - not connected');
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Left room:', roomId);
+        }
       }
     } catch (error) {
       console.warn('⚠️ Leave room failed:', error); // Giữ log cảnh báo
@@ -365,7 +403,10 @@ console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
   }
 
   cleanup() {
-    console.log('🧹 Cleaning up socket connections...'); // Giữ log quan trọng
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🧹 Cleaning up socket connections...');
+    }
     this.unsubscribeAll();
     
     if (this.client) {
@@ -381,7 +422,10 @@ console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
       this.connectionTimeout = null;
     }
     
-    console.log('✅ Socket cleanup completed'); // Giữ log quan trọng
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ Socket cleanup completed');
+    }
   }
 
   unsubscribeAll() {
@@ -406,17 +450,26 @@ console.error('❌ Join room with signaling failed:', error); // Giữ log lỗi
     await this.send(`/app/chat/${roomId}`, chatMessage);
   }
   async sendDeleteMessage(roomId, messageId) {
-    console.log(`SocketService: Gửi lệnh xóa cho message ${messageId} tới phòng ${roomId}`);
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`SocketService: Gửi lệnh xóa cho message ${messageId} tới phòng ${roomId}`);
+    }
     await this.send(`/app/chat/${roomId}/delete`, { id: messageId });
   }
 
   async sendEditMessage(roomId, messageId, newContent) {
-    console.log(`SocketService: Gửi lệnh sửa cho message ${messageId} tới phòng ${roomId}`);
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`SocketService: Gửi lệnh sửa cho message ${messageId} tới phòng ${roomId}`);
+    }
     await this.send(`/app/chat/${roomId}/edit`, { id: messageId, content: newContent });
   }
 
   async sendReaction(roomId, messageId, emoji) {
-    console.log(`SocketService: Gửi reaction ${emoji} cho message ${messageId} tới phòng ${roomId}`);
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`SocketService: Gửi reaction ${emoji} cho message ${messageId} tới phòng ${roomId}`);
+    }
     await this.send(`/app/chat/${roomId}/reaction`, { id: messageId, emoji: emoji });
   }
 
