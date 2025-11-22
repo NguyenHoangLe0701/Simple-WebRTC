@@ -313,6 +313,16 @@ class WebRTCService {
     return this.peerConnections.has(userId);
   }
 
+  // 🆕 FIX: Kiểm tra xem có thể gửi ICE candidate không
+  canSendIceCandidate(userId) {
+    const pc = this.peerConnections.get(userId);
+    if (!pc) return false;
+    
+    // Chỉ gửi ICE candidate khi ở trạng thái hợp lệ
+    const validStates = ['stable', 'have-local-offer', 'have-remote-offer'];
+    return validStates.includes(pc.signalingState);
+  }
+
   closePeerConnection(userId) {
     const pc = this.peerConnections.get(userId);
     if (pc) {

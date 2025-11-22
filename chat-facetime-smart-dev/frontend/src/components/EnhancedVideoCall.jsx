@@ -22,6 +22,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Xác định loại call (video hoặc voice)
   const isVideoCall = callType === 'video';
 
+  // 🆕 FIX: Throttling cho ICE candidates để tránh gửi quá nhiều
+  const iceCandidateQueue = useRef(new Map()); // Map<userId, candidate[]>
+  const iceCandidateTimer = useRef(new Map()); // Map<userId, timer>
+  const ICE_CANDIDATE_THROTTLE_MS = 100; // Gửi mỗi 100ms
+
   // 🆕 FIX: Kiểm tra WebRTC support - chỉ chạy 1 lần
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -59,11 +64,39 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     });
 
     webrtcService.setOnIceCandidate((userId, candidate) => {
-      sendSignal({
-        type: 'ice-candidate',
-        candidate: candidate,
-        targetUserId: userId
-      });
+      // 🆕 FIX: Chỉ gửi ICE candidate nếu có peer connection và đang ở trạng thái hợp lệ
+      if (!webrtcService.canSendIceCandidate(userId)) {
+        return; // Bỏ qua nếu chưa có peer connection hoặc không ở trạng thái hợp lệ
+      }
+        // Throttle ICE candidates - gom lại và gửi theo batch
+        if (!iceCandidateQueue.current.has(userId)) {
+          iceCandidateQueue.current.set(userId, []);
+        }
+        iceCandidateQueue.current.get(userId).push(candidate);
+
+        // Clear existing timer
+        if (iceCandidateTimer.current.has(userId)) {
+          clearTimeout(iceCandidateTimer.current.get(userId));
+        }
+
+        // Set new timer để gửi batch
+        const timer = setTimeout(() => {
+          const candidates = iceCandidateQueue.current.get(userId) || [];
+          if (candidates.length > 0) {
+            // Gửi candidate mới nhất (thường là quan trọng nhất)
+            const latestCandidate = candidates[candidates.length - 1];
+            sendSignalSafely({
+              type: 'ice-candidate',
+              candidate: latestCandidate,
+              targetUserId: userId
+            });
+            iceCandidateQueue.current.set(userId, []);
+          }
+          iceCandidateTimer.current.delete(userId);
+        }, ICE_CANDIDATE_THROTTLE_MS);
+
+        iceCandidateTimer.current.set(userId, timer);
+      }
     });
 
     webrtcService.setOnConnectionStateChange((userId, state) => {
@@ -74,6 +107,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       webrtcService.setOnRemoteStream(null);
       webrtcService.setOnIceCandidate(null);
       webrtcService.setOnConnectionStateChange(null);
+      
+      // 🆕 FIX: Cleanup ICE candidate timers
+      iceCandidateTimer.current.forEach(timer => clearTimeout(timer));
+      iceCandidateTimer.current.clear();
+      iceCandidateQueue.current.clear();
     };
   }, [isActive, roomId]);
 
@@ -217,7 +255,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
-  // 🆕 FIX: Hàm gửi signal đơn giản hơn
+  // 🆕 FIX: Hàm gửi signal với error handling tốt hơn
   const sendSignal = async (signal) => {
     try {
       if (!socketService.isConnected) {
@@ -241,8 +279,30 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       return true;
 
     } catch (error) {
+      // 🆕 FIX: Suppress lỗi runtime.lastError từ Chrome extensions (harmless)
+      if (error?.message?.includes('runtime.lastError') || 
+          error?.message?.includes('Receiving end does not exist')) {
+        // Đây là lỗi từ browser extension, không phải từ code của chúng ta
+        // Có thể bỏ qua an toàn
+        return false;
+      }
       console.error('❌ Send signal error:', error);
       return false;
+    }
+  };
+
+  // 🆕 FIX: Wrapper an toàn cho sendSignal với error suppression
+  const sendSignalSafely = async (signal) => {
+    try {
+      return await sendSignal(signal);
+    } catch (error) {
+      // Suppress các lỗi không quan trọng từ browser extensions
+      if (error?.message?.includes('runtime.lastError') || 
+          error?.message?.includes('Receiving end does not exist') ||
+          error?.message?.includes('Extension context invalidated')) {
+        return false; // Bỏ qua lỗi từ extensions
+      }
+      throw error; // Re-throw các lỗi khác
     }
   };
 
@@ -341,7 +401,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
               const offer = await webrtcService.createOffer(userId);
               
               if (offer) {
-                await sendSignal({
+                await sendSignalSafely({
                   type: 'offer',
                   offer: offer,
                   targetUserId: userId
@@ -386,7 +446,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         const offer = await webrtcService.createOffer(userId);
         
         if (offer) {
-          await sendSignal({
+          await sendSignalSafely({
             type: 'offer',
             offer: offer,
             targetUserId: userId
@@ -407,7 +467,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       const answer = await webrtcService.handleOffer(userId, data.offer);
       
       if (answer) {
-        await sendSignal({
+        await sendSignalSafely({
           type: 'answer', 
           answer: answer,
           targetUserId: userId
@@ -483,7 +543,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
     // Gửi leave signal
     if (socketService.isConnected && roomId) {
-      sendSignal({ type: 'leave' }).catch(() => {});
+      sendSignalSafely({ type: 'leave' }).catch(() => {});
       socketService.leaveRoom(roomId, currentUser?.username).catch(() => {});
     }
 
