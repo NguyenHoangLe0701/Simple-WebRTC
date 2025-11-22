@@ -88,7 +88,8 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
             sendSignalSafely({
               type: 'ice-candidate',
               candidate: latestCandidate,
-              targetUserId: userId
+              targetUserId: userId,
+              // 🔥 QUAN TRỌNG: fromUserId sẽ được thêm bởi sendSignal()
             });
             iceCandidateQueue.current.set(userId, []);
           }
@@ -255,7 +256,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
-  // 🆕 FIX: Hàm gửi signal với error handling tốt hơn
+  // 🆕 FIX: Hàm gửi signal với error handling tốt hơn - THÊM fromUserId
   const sendSignal = async (signal) => {
     try {
       if (!socketService.isConnected) {
@@ -263,12 +264,15 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         return false;
       }
 
+      const currentUserId = currentUser?.id || currentUser?.username;
+      
       const signalData = {
         type: signal.type,
         targetUserId: signal.targetUserId,
+        fromUserId: currentUserId, // 🔥 QUAN TRỌNG: Thêm fromUserId cho mọi signal
         [signal.type]: signal[signal.type], // offer, answer, candidate
         user: {
-          id: currentUser?.id || currentUser?.username,
+          id: currentUserId,
           username: currentUser?.username,
           fullName: currentUser?.fullName
         },
@@ -459,9 +463,15 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
-  // 🆕 FIX: Xử lý offer
+  // 🆕 FIX: Xử lý offer - SỬA để lấy userId đúng cách
   const handleOffer = async (data) => {
-    const userId = data.user?.id;
+    // 🔥 QUAN TRỌNG: Ưu tiên fromUserId
+    const userId = data.fromUserId || data.user?.id || data.userId;
+
+    if (!userId) {
+      console.error('❌ Offer missing userId:', data);
+      return;
+    }
 
     try {
       const answer = await webrtcService.handleOffer(userId, data.offer);
@@ -482,9 +492,15 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
-  // 🆕 FIX: Xử lý answer
+  // 🆕 FIX: Xử lý answer - SỬA để lấy userId đúng cách
   const handleAnswer = async (data) => {
-    const userId = data.user?.id;
+    // 🔥 QUAN TRỌNG: Ưu tiên fromUserId
+    const userId = data.fromUserId || data.user?.id || data.userId;
+    
+    if (!userId) {
+      console.error('❌ Answer missing userId:', data);
+      return;
+    }
     
     try {
       await webrtcService.handleAnswer(userId, data.answer);
@@ -496,14 +512,29 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
-  // 🆕 FIX: Xử lý ICE candidate
+  // 🆕 FIX: Xử lý ICE candidate - SỬA để lấy userId đúng cách
   const handleIceCandidate = async (data) => {
-    const userId = data.user?.id;
+    // 🔥 QUAN TRỌNG: Ưu tiên fromUserId, sau đó mới đến user.id
+    const userId = data.fromUserId || data.user?.id || data.userId || data.targetUserId;
+    
+    if (!userId) {
+      console.warn('⚠️ ICE candidate missing userId:', data);
+      return;
+    }
+    
+    // Bỏ qua nếu là từ chính mình
+    const currentUserId = currentUser?.id || currentUser?.username;
+    if (userId === currentUserId) {
+      return;
+    }
     
     try {
       await webrtcService.handleIceCandidate(userId, data.candidate);
     } catch (error) {
       // Bỏ qua lỗi thông thường của ICE candidate
+      if (error.name !== 'OperationError' && error.name !== 'InvalidStateError') {
+        console.warn('⚠️ Error handling ICE candidate:', error);
+      }
     }
   };
 
@@ -717,7 +748,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           {/* Remote Videos/Audio */}
           {remoteVideos.map(([userId, stream]) => {
             const participant = participants.find(p => p.id === userId);
-            const hasVideo = stream.getVideoTracks().length > 0;
+            const hasVideo = stream && stream.getVideoTracks().length > 0;
             
             return (
               <div key={userId} className={`relative bg-black rounded-xl overflow-hidden border-2 border-green-500 ${getVideoSize()}`}>
@@ -725,10 +756,22 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
                   <video
                     autoPlay
                     playsInline
+                    muted={false}
                     className="w-full h-full object-cover"
                     ref={(videoRef) => {
-                      if (videoRef && videoRef.srcObject !== stream) {
-                        videoRef.srcObject = stream;
+                      // 🔥 QUAN TRỌNG: Set srcObject mỗi lần render để đảm bảo video được cập nhật
+                      if (videoRef && stream) {
+                        // Chỉ set lại nếu khác nhau để tránh re-render không cần thiết
+                        if (videoRef.srcObject !== stream) {
+                          videoRef.srcObject = stream;
+                          // 🔥 Đảm bảo video play
+                          videoRef.play().catch(err => {
+                            // Bỏ qua lỗi play nếu đã bị pause hoặc không ready
+                            if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+                              console.warn('Video play error:', err);
+                            }
+                          });
+                        }
                       }
                     }}
                   />
@@ -741,7 +784,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
                   </div>
                 )}
                 <div className="absolute bottom-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium">
-                  👥 {participant?.fullName || 'Remote'}
+                  👥 {participant?.fullName || participant?.username || userId || 'Remote'}
                 </div>
                 <div className="absolute top-3 right-3 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
               </div>

@@ -67,14 +67,20 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
       setRemoteStreams(prev => new Map(prev).set(userId, stream));
     });
 
-    // KHI SERVICE TẠO ICE CANDIDATE: Gửi nó qua socket
+    // KHI SERVICE TẠO ICE CANDIDATE: Gửi nó qua socket - THÊM fromUserId
     WebRTCService.setOnIceCandidate((userId, candidate) => {
-      console.log('Component: Gửi ICE candidate cho', userId);
+      // 🔇 Giảm log - không log mỗi ICE candidate
+      // console.log('Component: Gửi ICE candidate cho', userId);
       socketService.sendSignal(roomId, {
         type: 'ice-candidate',
         candidate: candidate,
-        fromUserId: currentUser.id,
-        targetUserId: userId
+        fromUserId: currentUser.id, // 🔥 QUAN TRỌNG: Đảm bảo có fromUserId
+        targetUserId: userId,
+        user: {
+          id: currentUser.id,
+          username: currentUser.username,
+          fullName: currentUser.fullName
+        }
       });
     });
 
@@ -224,10 +230,16 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
           break;
         
         // NHẬN ĐƯỢC ICE CANDIDATE:
-        case 'ice-candidate':
-          // Dùng service xử lý candidate
-          await WebRTCService.handleIceCandidate(fromUserId, data.candidate);
-          break;
+        case 'ice-candidate':
+          // 🔥 QUAN TRỌNG: Đảm bảo có fromUserId, nếu không thì dùng fallback
+          const candidateUserId = fromUserId || data.fromUserId || data.user?.id || data.userId;
+          if (candidateUserId) {
+            // Dùng service xử lý candidate
+            await WebRTCService.handleIceCandidate(candidateUserId, data.candidate);
+          } else {
+            console.warn('⚠️ ICE candidate missing userId:', data);
+          }
+          break;
         
       // TODO: Xử lý 'screen-share'
       // Logic screen-share cũ bị lỗi (không thể gửi stream qua JSON)
@@ -365,22 +377,47 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
                 </div>
               </div>
 
-              {/* Remote Videos */}
-              {Array.from(remoteStreams.entries()).map(([userId, stream]) => (
-                <div key={userId} className="relative bg-gray-700 rounded-lg overflow-hidden aspect-video">
-                  <video
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                    ref={videoRef => {
-                      if (videoRef) videoRef.srcObject = stream;
-                    }}
-                  />
-                  <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                    {participants.find(p => p.id === userId)?.fullName || userId}
-                  </div>
-                </div>
-              ))}
+              {/* Remote Videos */}
+              {Array.from(remoteStreams.entries()).map(([userId, stream]) => {
+                const hasVideo = stream && stream.getVideoTracks().length > 0;
+                
+                return (
+                  <div key={userId} className="relative bg-gray-700 rounded-lg overflow-hidden aspect-video">
+                    {hasVideo ? (
+                      <video
+                        autoPlay
+                        playsInline
+                        muted={false}
+                        className="w-full h-full object-cover"
+                        ref={videoRef => {
+                          // 🔥 QUAN TRỌNG: Set srcObject mỗi lần render để đảm bảo video được cập nhật
+                          if (videoRef && stream) {
+                            if (videoRef.srcObject !== stream) {
+                              videoRef.srcObject = stream;
+                              // 🔥 Đảm bảo video play
+                              videoRef.play().catch(err => {
+                                // Bỏ qua lỗi play nếu đã bị pause hoặc không ready
+                                if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+                                  console.warn('Video play error:', err);
+                                }
+                              });
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 bg-gray-600 flex items-center justify-center">
+                        <div className="w-16 h-16 bg-gray-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">
+                          {(participants.find(p => p.id === userId)?.fullName || userId || 'U').charAt(0).toUpperCase()}
+                        </div>
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
+                      {participants.find(p => p.id === userId)?.fullName || userId}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
