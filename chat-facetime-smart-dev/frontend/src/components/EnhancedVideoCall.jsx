@@ -68,36 +68,36 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       if (!webrtcService.canSendIceCandidate(userId)) {
         return; // Bỏ qua nếu chưa có peer connection hoặc không ở trạng thái hợp lệ
       }
-        // Throttle ICE candidates - gom lại và gửi theo batch
-        if (!iceCandidateQueue.current.has(userId)) {
+      
+      // Throttle ICE candidates - gom lại và gửi theo batch
+      if (!iceCandidateQueue.current.has(userId)) {
+        iceCandidateQueue.current.set(userId, []);
+      }
+      iceCandidateQueue.current.get(userId).push(candidate);
+
+      // Clear existing timer
+      if (iceCandidateTimer.current.has(userId)) {
+        clearTimeout(iceCandidateTimer.current.get(userId));
+      }
+
+      // Set new timer để gửi batch
+      const timer = setTimeout(() => {
+        const candidates = iceCandidateQueue.current.get(userId) || [];
+        if (candidates.length > 0) {
+          // Gửi candidate mới nhất (thường là quan trọng nhất)
+          const latestCandidate = candidates[candidates.length - 1];
+          sendSignalSafely({
+            type: 'ice-candidate',
+            candidate: latestCandidate,
+            targetUserId: userId,
+            // 🔥 QUAN TRỌNG: fromUserId sẽ được thêm bởi sendSignal()
+          });
           iceCandidateQueue.current.set(userId, []);
         }
-        iceCandidateQueue.current.get(userId).push(candidate);
+        iceCandidateTimer.current.delete(userId);
+      }, ICE_CANDIDATE_THROTTLE_MS);
 
-        // Clear existing timer
-        if (iceCandidateTimer.current.has(userId)) {
-          clearTimeout(iceCandidateTimer.current.get(userId));
-        }
-
-        // Set new timer để gửi batch
-        const timer = setTimeout(() => {
-          const candidates = iceCandidateQueue.current.get(userId) || [];
-          if (candidates.length > 0) {
-            // Gửi candidate mới nhất (thường là quan trọng nhất)
-            const latestCandidate = candidates[candidates.length - 1];
-            sendSignalSafely({
-              type: 'ice-candidate',
-              candidate: latestCandidate,
-              targetUserId: userId,
-              // 🔥 QUAN TRỌNG: fromUserId sẽ được thêm bởi sendSignal()
-            });
-            iceCandidateQueue.current.set(userId, []);
-          }
-          iceCandidateTimer.current.delete(userId);
-        }, ICE_CANDIDATE_THROTTLE_MS);
-
-        iceCandidateTimer.current.set(userId, timer);
-      }
+      iceCandidateTimer.current.set(userId, timer);
     });
 
     webrtcService.setOnConnectionStateChange((userId, state) => {

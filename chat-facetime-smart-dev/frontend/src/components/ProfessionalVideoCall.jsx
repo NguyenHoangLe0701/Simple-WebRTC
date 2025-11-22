@@ -20,8 +20,7 @@ import {
   VideoOff 
 } from 'lucide-react';
 import socketService from '../services/socket';
-
-import WebRTCService from '../services/WebRTCService'; 
+import WebRTCService from '../services/webrtc.service'; 
 
 
 const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
