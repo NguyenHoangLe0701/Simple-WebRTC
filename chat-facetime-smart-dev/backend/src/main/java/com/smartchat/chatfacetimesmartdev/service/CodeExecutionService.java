@@ -1,111 +1,99 @@
-package com.smartchat.chatfacetimesmartdev.service;
 
+package com.smartchat.chatfacetimesmartdev.service;
 
 import com.smartchat.chatfacetimesmartdev.dto.CodeExecutionRequest;
 import com.smartchat.chatfacetimesmartdev.dto.CodeExecutionResult;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import java.io.*;
-import java.nio.file.*;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 public class CodeExecutionService {
 
+    private final RestTemplate restTemplate;
+    private final String sandboxUrl;
+
+    public CodeExecutionService() {
+        // Set timeout cho RestTemplate (connect + read)
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) Duration.ofSeconds(5).toMillis());
+        factory.setReadTimeout((int) Duration.ofSeconds(20).toMillis());
+        this.restTemplate = new RestTemplate(factory);
+        String envUrl = System.getenv("SANDBOX_URL");
+        if (envUrl == null || envUrl.isBlank()) {
+            envUrl = "https://code-executor-latest-1.onrender.com";
+        }
+        this.sandboxUrl = envUrl;
+    }
+
     public CodeExecutionResult executeCode(CodeExecutionRequest request) {
         switch (request.getLanguage().toLowerCase()) {
             case "python":
-                return executePythonWithDocker(request.getCode());
+                return executePython(request.getCode());
             case "javascript":
+            case "js":
                 return executeJavaScript(request.getCode());
             case "java":
                 return executeJava(request.getCode());
             case "cpp":
+            case "c++":
                 return executeCpp(request.getCode());
             default:
                 return new CodeExecutionResult("", "Unsupported language: " + request.getLanguage(), false);
         }
     }
 
-    public CodeExecutionResult executePythonWithDocker(String code) {
-        try {
-            String containerId = createPythonContainer(code);
-            String output = getContainerOutput(containerId);
-            cleanupContainer(containerId);
-            return new CodeExecutionResult(output, "", true);
-        } catch (Exception e) {
-            return new CodeExecutionResult("", "Execution error: " + e.getMessage(), false);
-        }
-    }
-
-    private String createPythonContainer(String code) throws IOException, InterruptedException {
-        // Tạo temporary file với code
-        Path tempFile = Files.createTempFile("python_code", ".py");
-        Files.write(tempFile, code.getBytes());
-
-        // Docker command để chạy Python code trong container
-        ProcessBuilder processBuilder = new ProcessBuilder(
-            "docker", "run", "-d", "--rm",
-            "-v", tempFile.getParent() + ":/app",
-            "python:3.9-slim",
-            "python", "/app/" + tempFile.getFileName().toString()
-        );
-
-        Process process = processBuilder.start();
-        process.waitFor(5, TimeUnit.SECONDS);
-
-        // Đọc container ID từ output
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        String containerId = reader.readLine().trim();
-
-        // Xóa temporary file
-        Files.delete(tempFile);
-
-        return containerId;
-    }
-
-    private String getContainerOutput(String containerId) throws IOException, InterruptedException {
-        // Chờ container hoàn thành
-        Process waitProcess = new ProcessBuilder("docker", "wait", containerId).start();
-        waitProcess.waitFor(30, TimeUnit.SECONDS); // Timeout 30 giây
-
-        // Lấy logs từ container
-        Process logsProcess = new ProcessBuilder("docker", "logs", containerId).start();
-        logsProcess.waitFor(5, TimeUnit.SECONDS);
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(logsProcess.getInputStream()));
-        return reader.lines().collect(Collectors.joining("\n"));
-    }
-
-    private void cleanupContainer(String containerId) throws IOException, InterruptedException {
-        // Dừng và xóa container nếu còn chạy
-        new ProcessBuilder("docker", "stop", containerId).start().waitFor(5, TimeUnit.SECONDS);
+    private CodeExecutionResult executePython(String code) {
+        String url = sandboxUrl + "/run/python";
+        return postToSandbox(url, Map.of("code", code));
     }
 
     private CodeExecutionResult executeJavaScript(String code) {
-        try {
-            // Implementation for JavaScript execution
-            return new CodeExecutionResult("JavaScript executed successfully", "", true);
-        } catch (Exception e) {
-            return new CodeExecutionResult("", "JavaScript execution error: " + e.getMessage(), false);
-        }
+        String url = sandboxUrl + "/run/javascript";
+        return postToSandbox(url, Map.of("code", code));
     }
 
     private CodeExecutionResult executeJava(String code) {
-        try {
-            // Implementation for Java execution
-            return new CodeExecutionResult("Java executed successfully", "", true);
-        } catch (Exception e) {
-            return new CodeExecutionResult("", "Java execution error: " + e.getMessage(), false);
-        }
+        String url = sandboxUrl + "/run/java";
+        return postToSandbox(url, Map.of("code", code));
     }
 
     private CodeExecutionResult executeCpp(String code) {
+        String url = sandboxUrl + "/run/cpp";
+        return postToSandbox(url, Map.of("code", code));
+    }
+
+    @SuppressWarnings("unchecked")
+    private CodeExecutionResult postToSandbox(String url, Map<String, String> payload) {
         try {
-            // Implementation for C++ execution
-            return new CodeExecutionResult("C++ executed successfully", "", true);
-        } catch (Exception e) {
-            return new CodeExecutionResult("", "C++ execution error: " + e.getMessage(), false);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<Map<String, String>> entity = new HttpEntity<>(payload, headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+                String output = body.getOrDefault("output", "").toString();
+                String error = body.getOrDefault("error", "").toString();
+                Boolean success = Boolean.TRUE.equals(body.getOrDefault("success", Boolean.FALSE));
+                return new CodeExecutionResult(output, error, success);
+            } else {
+                return new CodeExecutionResult("", "Sandbox returned non-200: " + response.getStatusCode(), false);
+            }
+        } catch (ResourceAccessException ex) {
+            return new CodeExecutionResult("", "Timeout / Cannot reach sandbox: " + ex.getMessage(), false);
+        } catch (RestClientException ex) {
+            return new CodeExecutionResult("", "Sandbox error: " + ex.getMessage(), false);
+        } catch (Exception ex) {
+            return new CodeExecutionResult("", "Unexpected error: " + ex.getMessage(), false);
         }
     }
 }
