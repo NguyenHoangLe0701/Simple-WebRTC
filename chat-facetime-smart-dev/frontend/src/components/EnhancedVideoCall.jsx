@@ -22,6 +22,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Xác định loại call (video hoặc voice)
   const isVideoCall = callType === 'video';
 
+  // 🆕 FIX: Throttling cho ICE candidates để tránh gửi quá nhiều
+  const iceCandidateQueue = useRef(new Map()); // Map<userId, candidate[]>
+  const iceCandidateTimer = useRef(new Map()); // Map<userId, timer>
+  const ICE_CANDIDATE_THROTTLE_MS = 100; // Gửi mỗi 100ms
+
   // 🆕 FIX: Kiểm tra WebRTC support - chỉ chạy 1 lần
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -34,25 +39,23 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Effect chính - chỉ chạy khi isActive thay đổi
   useEffect(() => {
     if (isActive && !isInitialized) {
-      console.log('🚀 Starting video call initialization...');
       setShowPermissionModal(true);
     }
 
     if (!isActive && isInitialized) {
-      console.log('🛑 Stopping video call...');
       cleanup();
     }
   }, [isActive, isInitialized]);
 
-  // 🆕 FIX: Setup WebRTC event handlers - chỉ chạy 1 lần
+  // 🆕 FIX: Setup WebRTC event handlers và set roomId
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !roomId) return;
 
-    console.log('🔧 Setting up WebRTC event handlers...');
+    // Set roomId cho webrtcService
+    webrtcService.setRoomId(roomId);
 
     // Setup WebRTC event handlers
     webrtcService.setOnRemoteStream((userId, stream) => {
-      console.log('🎯 Remote stream received for:', userId);
       setRemoteStreams(prev => {
         const newMap = new Map(prev);
         newMap.set(userId, stream);
@@ -61,31 +64,61 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     });
 
     webrtcService.setOnIceCandidate((userId, candidate) => {
-      console.log('🧊 Sending ICE candidate for:', userId);
-      sendSignal({
-        type: 'ice-candidate',
-        candidate: candidate,
-        targetUserId: userId
-      });
+      // 🆕 FIX: Chỉ gửi ICE candidate nếu có peer connection và đang ở trạng thái hợp lệ
+      if (!webrtcService.canSendIceCandidate(userId)) {
+        return; // Bỏ qua nếu chưa có peer connection hoặc không ở trạng thái hợp lệ
+      }
+      
+      // Throttle ICE candidates - gom lại và gửi theo batch
+      if (!iceCandidateQueue.current.has(userId)) {
+        iceCandidateQueue.current.set(userId, []);
+      }
+      iceCandidateQueue.current.get(userId).push(candidate);
+
+      // Clear existing timer
+      if (iceCandidateTimer.current.has(userId)) {
+        clearTimeout(iceCandidateTimer.current.get(userId));
+      }
+
+      // Set new timer để gửi batch
+      const timer = setTimeout(() => {
+        const candidates = iceCandidateQueue.current.get(userId) || [];
+        if (candidates.length > 0) {
+          // Gửi candidate mới nhất (thường là quan trọng nhất)
+          const latestCandidate = candidates[candidates.length - 1];
+          sendSignalSafely({
+            type: 'ice-candidate',
+            candidate: latestCandidate,
+            targetUserId: userId,
+            // 🔥 QUAN TRỌNG: fromUserId sẽ được thêm bởi sendSignal()
+          });
+          iceCandidateQueue.current.set(userId, []);
+        }
+        iceCandidateTimer.current.delete(userId);
+      }, ICE_CANDIDATE_THROTTLE_MS);
+
+      iceCandidateTimer.current.set(userId, timer);
     });
 
     webrtcService.setOnConnectionStateChange((userId, state) => {
-      console.log(`🔗 Connection state for ${userId}:`, state);
       setConnectionStatus(state);
     });
 
     return () => {
-      console.log('🧹 Cleaning up WebRTC event handlers...');
       webrtcService.setOnRemoteStream(null);
       webrtcService.setOnIceCandidate(null);
       webrtcService.setOnConnectionStateChange(null);
+      
+      // 🆕 FIX: Cleanup ICE candidate timers
+      iceCandidateTimer.current.forEach(timer => clearTimeout(timer));
+      iceCandidateTimer.current.clear();
+      iceCandidateQueue.current.clear();
     };
-  }, [isActive]);
+  }, [isActive, roomId]);
 
   // 🆕 FIX: Set local stream cho WebRTC service
   useEffect(() => {
     if (localStream) {
-      console.log('🎥 Setting local stream for WebRTC service');
       webrtcService.setLocalStream(localStream);
       
       // Update local video
@@ -98,48 +131,76 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Khởi tạo signaling khi có local stream và room
   useEffect(() => {
     if (isActive && localStream && roomId && permissionStatus === 'granted') {
-      console.log('📡 Initializing signaling...');
       initializeSignaling();
     }
   }, [isActive, localStream, roomId, permissionStatus]);
 
-  // 🆕 FIX: Hàm request media permission đơn giản hơn - chỉ xin audio cho voice call
+  // 🆕 FIX: Hàm request media permission với fallback audio-only khi camera lỗi
   const requestMediaPermission = async () => {
     try {
-      console.log(`🎥 Requesting media permissions for ${isVideoCall ? 'video' : 'voice'} call...`);
       setPermissionStatus('requesting');
       setShowPermissionModal(false);
 
-      // 🆕 FIX: Chỉ xin audio cho voice call, xin cả video và audio cho video call
-      const constraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
-      };
+      let stream = null;
+      let hasVideo = false;
 
-      // Chỉ thêm video constraints nếu là video call
+      // Nếu là video call, thử lấy cả video và audio
       if (isVideoCall) {
-        constraints.video = {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        };
+        try {
+          const videoConstraints = {
+            audio: {
+              echoCancellation: true,
+              noiseSuppression: true,
+              autoGainControl: true
+            },
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 }
+            }
+          };
+          stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
+          hasVideo = stream.getVideoTracks().length > 0;
+        } catch (videoError) {
+          // Nếu video lỗi, thử fallback chỉ audio
+          if (videoError.name === 'NotFoundError' || videoError.name === 'NotReadableError' || videoError.name === 'OverconstrainedError') {
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                  echoCancellation: true,
+                  noiseSuppression: true,
+                  autoGainControl: true
+                },
+                video: false
+              });
+              hasVideo = false;
+            } catch (audioError) {
+              // Nếu cả audio cũng lỗi, throw error
+              throw audioError;
+            }
+          } else {
+            throw videoError;
+          }
+        }
       } else {
-        // Voice call: không xin video
-        constraints.video = false;
+        // Voice call: chỉ xin audio
+        const constraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        hasVideo = false;
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      console.log(`✅ Media permissions granted for ${isVideoCall ? 'video' : 'voice'} call`);
       setPermissionStatus('granted');
       setLocalStream(stream);
       setIsInitialized(true);
 
     } catch (error) {
-      console.error('❌ Media permission error:', error);
       setPermissionStatus('denied');
       
       const deviceType = isVideoCall ? 'camera/microphone' : 'microphone';
@@ -157,33 +218,30 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
-  // 🆕 FIX: Hàm khởi tạo signaling đơn giản hơn
+  // 🆕 FIX: Hàm khởi tạo signaling với presence support
   const initializeSignaling = async () => {
     if (!isActive || !roomId || !localStream) {
-      console.log('⚠️ Cannot initialize signaling - missing requirements');
       return;
     }
 
     try {
-      console.log('🚀 Starting signaling initialization...');
       setConnectionStatus('connecting');
 
       // Kết nối socket
       if (!socketService.isConnected) {
-        console.log('🔌 Connecting to socket...');
         await socketService.connect();
       }
 
       // Subscribe to signaling
-      console.log('📡 Subscribing to signaling...');
       await socketService.subscribeToSignaling(roomId, handleSignalingMessage);
 
+      // Subscribe to presence để nhận danh sách users hiện có
+      await socketService.subscribeToPresence(roomId, handlePresenceMessage);
+
       // Join room
-      console.log('👤 Joining room...');
       await socketService.joinRoomWithSignaling(roomId, currentUser);
 
       setConnectionStatus('connected');
-      console.log('✅ Signaling initialized successfully');
 
     } catch (error) {
       console.error('❌ Signaling initialization error:', error);
@@ -192,14 +250,13 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       // Thử kết nối lại sau 3s
       setTimeout(() => {
         if (isActive && connectionStatus !== 'connected') {
-          console.log('🔄 Retrying signaling initialization...');
           initializeSignaling();
         }
       }, 3000);
     }
   };
 
-  // 🆕 FIX: Hàm gửi signal đơn giản hơn
+  // 🆕 FIX: Hàm gửi signal với error handling tốt hơn - THÊM fromUserId
   const sendSignal = async (signal) => {
     try {
       if (!socketService.isConnected) {
@@ -207,44 +264,74 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         return false;
       }
 
+      const currentUserId = currentUser?.id || currentUser?.username;
+      
       const signalData = {
         type: signal.type,
         targetUserId: signal.targetUserId,
+        fromUserId: currentUserId, // 🔥 QUAN TRỌNG: Thêm fromUserId cho mọi signal
         [signal.type]: signal[signal.type], // offer, answer, candidate
         user: {
-          id: currentUser?.id || currentUser?.username,
+          id: currentUserId,
           username: currentUser?.username,
           fullName: currentUser?.fullName
         },
         timestamp: Date.now()
       };
 
-      console.log('📤 Sending signal:', signal.type, 'to:', signal.targetUserId);
       await socketService.sendSignal(roomId, signalData);
       return true;
 
     } catch (error) {
+      // 🆕 FIX: Suppress lỗi runtime.lastError từ Chrome extensions (harmless)
+      if (error?.message?.includes('runtime.lastError') || 
+          error?.message?.includes('Receiving end does not exist')) {
+        // Đây là lỗi từ browser extension, không phải từ code của chúng ta
+        // Có thể bỏ qua an toàn
+        return false;
+      }
       console.error('❌ Send signal error:', error);
       return false;
     }
   };
 
-  // 🆕 FIX: Xử lý signaling message
-  const handleSignalingMessage = async (data) => {
-    const currentUserId = currentUser?.id || currentUser?.username;
-    const senderId = data.user?.id;
-
-    // Bỏ qua message từ chính mình
-    if (senderId === currentUserId) {
-      return;
-    }
-
-    console.log('📨 Received signal:', data.type, 'from:', senderId);
-
+  // 🆕 FIX: Wrapper an toàn cho sendSignal với error suppression
+  const sendSignalSafely = async (signal) => {
     try {
+      return await sendSignal(signal);
+    } catch (error) {
+      // Suppress các lỗi không quan trọng từ browser extensions
+      if (error?.message?.includes('runtime.lastError') || 
+          error?.message?.includes('Receiving end does not exist') ||
+          error?.message?.includes('Extension context invalidated')) {
+        return false; // Bỏ qua lỗi từ extensions
+      }
+      throw error; // Re-throw các lỗi khác
+    }
+  };
+
+  // 🆕 FIX: Xử lý signaling message
+  const handleSignalingMessage = async (frame) => {
+    try {
+      // Parse message - có thể là frame với body hoặc object trực tiếp
+      let data = frame;
+      if (frame.body) {
+        data = typeof frame.body === 'string' ? JSON.parse(frame.body) : frame.body;
+      } else if (typeof frame === 'string') {
+        data = JSON.parse(frame);
+      }
+
+      const currentUserId = currentUser?.id || currentUser?.username;
+      const senderId = data.user?.id || data.fromUserId || data.userId;
+
+      // Bỏ qua message từ chính mình
+      if (senderId === currentUserId) {
+        return;
+      }
+
       switch (data.type) {
         case 'join':
-          await handleUserJoin(data.user);
+          await handleUserJoin(data.user || { id: senderId, username: data.username });
           break;
           
         case 'offer':
@@ -260,91 +347,200 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           break;
           
         case 'leave':
-          handleUserLeave(data.user);
+          handleUserLeave(data.user || { id: senderId, username: data.username });
           break;
-          
-        default:
-          console.warn('⚠️ Unknown signal type:', data.type);
       }
     } catch (error) {
       console.error('❌ Error handling signal:', error);
     }
   };
 
+  // 🆕 FIX: Xử lý presence message để nhận danh sách users hiện có
+  const handlePresenceMessage = async (message) => {
+    try {
+      let users = [];
+      
+      // Parse message - có thể là object hoặc string
+      if (typeof message === 'string') {
+        const parsed = JSON.parse(message);
+        users = parsed.users || parsed.data?.users || [];
+      } else if (message.body) {
+        const parsed = JSON.parse(message.body);
+        users = parsed.users || parsed.data?.users || [];
+      } else {
+        users = message.users || message.data?.users || [];
+      }
+
+      if (!Array.isArray(users) || users.length === 0) {
+        return;
+      }
+
+      const currentUserId = currentUser?.id || currentUser?.username;
+      
+      // Lọc ra những user khác (không bao gồm chính mình)
+      const otherUsers = users.filter(u => {
+        const uid = u.id || u.userId || u.username;
+        return uid && uid !== currentUserId;
+      });
+
+      // Cập nhật participants
+      setParticipants(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const newUsers = otherUsers.filter(u => {
+          const uid = u.id || u.userId || u.username;
+          return uid && !existingIds.has(uid);
+        });
+        return [...prev, ...newUsers];
+      });
+
+      // Tạo offer cho TẤT CẢ users hiện có trong room (chỉ khi đã có localStream)
+      if (localStream && webrtcService.localStream) {
+        for (const user of otherUsers) {
+          const userId = user.id || user.userId || user.username;
+          if (!userId) continue;
+
+          try {
+            // Kiểm tra xem đã có peer connection chưa
+            if (!webrtcService.hasPeerConnection(userId)) {
+              const offer = await webrtcService.createOffer(userId);
+              
+              if (offer) {
+                await sendSignalSafely({
+                  type: 'offer',
+                  offer: offer,
+                  targetUserId: userId
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`❌ Error creating offer for ${userId}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling presence message:', error);
+    }
+  };
+
   // 🆕 FIX: Xử lý user join
   const handleUserJoin = async (user) => {
-    const userId = user.id;
-    console.log('👤 User joined:', userId);
+    const userId = user.id || user.userId || user.username;
+    if (!userId) return;
+
+    const currentUserId = currentUser?.id || currentUser?.username;
+    if (userId === currentUserId) return;
 
     // Thêm vào participants
     setParticipants(prev => {
-      const exists = prev.find(p => p.id === userId);
+      const exists = prev.find(p => {
+        const pid = p.id || p.userId || p.username;
+        return pid === userId;
+      });
       if (exists) return prev;
       return [...prev, user];
     });
 
-    // Tạo offer cho user mới
+    // Tạo offer cho user mới (chỉ nếu chưa có peer connection và đã có localStream)
+    if (!localStream || !webrtcService.localStream) {
+      return;
+    }
+
     try {
-      console.log('🎯 Creating offer for new user:', userId);
-      const offer = await webrtcService.createOffer(userId);
-      
-      await sendSignal({
-        type: 'offer',
-        offer: offer,
-        targetUserId: userId
-      });
+      if (!webrtcService.hasPeerConnection(userId)) {
+        const offer = await webrtcService.createOffer(userId);
+        
+        if (offer) {
+          await sendSignalSafely({
+            type: 'offer',
+            offer: offer,
+            targetUserId: userId
+          });
+        }
+      }
       
     } catch (error) {
       console.error('❌ Create offer error:', error);
     }
   };
 
-  // 🆕 FIX: Xử lý offer
+  // 🆕 FIX: Xử lý offer - SỬA để lấy userId đúng cách
   const handleOffer = async (data) => {
-    const userId = data.user?.id;
-    console.log('📥 Handling offer from:', userId);
+    // 🔥 QUAN TRỌNG: Ưu tiên fromUserId
+    const userId = data.fromUserId || data.user?.id || data.userId;
+
+    if (!userId) {
+      console.error('❌ Offer missing userId:', data);
+      return;
+    }
 
     try {
       const answer = await webrtcService.handleOffer(userId, data.offer);
       
-      await sendSignal({
-        type: 'answer', 
-        answer: answer,
-        targetUserId: userId
-      });
+      if (answer) {
+        await sendSignalSafely({
+          type: 'answer', 
+          answer: answer,
+          targetUserId: userId
+        });
+      }
       
     } catch (error) {
-      console.error('❌ Handle offer error:', error);
+      // Chỉ log lỗi thực sự, bỏ qua InvalidStateError khi state là stable
+      if (error.name !== 'InvalidStateError' || error.message?.includes('stable')) {
+        console.error('❌ Handle offer error:', error);
+      }
     }
   };
 
-  // 🆕 FIX: Xử lý answer
+  // 🆕 FIX: Xử lý answer - SỬA để lấy userId đúng cách
   const handleAnswer = async (data) => {
-    const userId = data.user?.id;
-    console.log('📥 Handling answer from:', userId);
+    // 🔥 QUAN TRỌNG: Ưu tiên fromUserId
+    const userId = data.fromUserId || data.user?.id || data.userId;
+    
+    if (!userId) {
+      console.error('❌ Answer missing userId:', data);
+      return;
+    }
     
     try {
       await webrtcService.handleAnswer(userId, data.answer);
     } catch (error) {
-      console.error('❌ Handle answer error:', error);
+      // Chỉ log lỗi thực sự, bỏ qua InvalidStateError khi state là stable
+      if (error.name !== 'InvalidStateError' || error.message?.includes('stable')) {
+        console.error('❌ Handle answer error:', error);
+      }
     }
   };
 
-  // 🆕 FIX: Xử lý ICE candidate
+  // 🆕 FIX: Xử lý ICE candidate - SỬA để lấy userId đúng cách
   const handleIceCandidate = async (data) => {
-    const userId = data.user?.id;
+    // 🔥 QUAN TRỌNG: Ưu tiên fromUserId, sau đó mới đến user.id
+    const userId = data.fromUserId || data.user?.id || data.userId || data.targetUserId;
+    
+    if (!userId) {
+      console.warn('⚠️ ICE candidate missing userId:', data);
+      return;
+    }
+    
+    // Bỏ qua nếu là từ chính mình
+    const currentUserId = currentUser?.id || currentUser?.username;
+    if (userId === currentUserId) {
+      return;
+    }
     
     try {
       await webrtcService.handleIceCandidate(userId, data.candidate);
     } catch (error) {
-      console.error('❌ Handle ICE candidate error:', error);
+      // Bỏ qua lỗi thông thường của ICE candidate
+      if (error.name !== 'OperationError' && error.name !== 'InvalidStateError') {
+        console.warn('⚠️ Error handling ICE candidate:', error);
+      }
     }
   };
 
   // 🆕 FIX: Xử lý user leave
   const handleUserLeave = (user) => {
     const userId = user.id;
-    console.log('👋 User left:', userId);
 
     // Xóa khỏi participants
     setParticipants(prev => prev.filter(p => p.id !== userId));
@@ -365,8 +561,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     if (cleanupInProgress.current) return;
     cleanupInProgress.current = true;
 
-    console.log('🧹 Starting cleanup...');
-
     // Dừng local stream
     if (localStream) {
       localStream.getTracks().forEach(track => {
@@ -380,8 +574,8 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
     // Gửi leave signal
     if (socketService.isConnected && roomId) {
-      sendSignal({ type: 'leave' }).catch(console.error);
-      socketService.leaveRoom(roomId, currentUser?.username).catch(console.error);
+      sendSignalSafely({ type: 'leave' }).catch(() => {});
+      socketService.leaveRoom(roomId, currentUser?.username).catch(() => {});
     }
 
     // Reset state
@@ -393,7 +587,6 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     setShowPermissionModal(false);
 
     cleanupInProgress.current = false;
-    console.log('✅ Cleanup completed');
   };
 
   // 🆕 FIX: Toggle functions đơn giản hơn
@@ -555,7 +748,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           {/* Remote Videos/Audio */}
           {remoteVideos.map(([userId, stream]) => {
             const participant = participants.find(p => p.id === userId);
-            const hasVideo = stream.getVideoTracks().length > 0;
+            const hasVideo = stream && stream.getVideoTracks().length > 0;
             
             return (
               <div key={userId} className={`relative bg-black rounded-xl overflow-hidden border-2 border-green-500 ${getVideoSize()}`}>
@@ -563,10 +756,22 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
                   <video
                     autoPlay
                     playsInline
+                    muted={false}
                     className="w-full h-full object-cover"
                     ref={(videoRef) => {
-                      if (videoRef && videoRef.srcObject !== stream) {
-                        videoRef.srcObject = stream;
+                      // 🔥 QUAN TRỌNG: Set srcObject mỗi lần render để đảm bảo video được cập nhật
+                      if (videoRef && stream) {
+                        // Chỉ set lại nếu khác nhau để tránh re-render không cần thiết
+                        if (videoRef.srcObject !== stream) {
+                          videoRef.srcObject = stream;
+                          // 🔥 Đảm bảo video play
+                          videoRef.play().catch(err => {
+                            // Bỏ qua lỗi play nếu đã bị pause hoặc không ready
+                            if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+                              console.warn('Video play error:', err);
+                            }
+                          });
+                        }
                       }
                     }}
                   />
@@ -579,7 +784,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
                   </div>
                 )}
                 <div className="absolute bottom-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium">
-                  👥 {participant?.fullName || 'Remote'}
+                  👥 {participant?.fullName || participant?.username || userId || 'Remote'}
                 </div>
                 <div className="absolute top-3 right-3 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
               </div>

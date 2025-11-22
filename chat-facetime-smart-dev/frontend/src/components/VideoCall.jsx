@@ -33,12 +33,43 @@ const VideoCall = ({ isActive, onEndCall, roomId }) => {
         localVideoRef.current.srcObject = stream;
       }
 
-      // Initialize peer connection
+      // Initialize peer connection với TURN server
+      // ⚠️ QUAN TRỌNG: Thay YOUR_METERED_USERNAME và YOUR_METERED_CREDENTIAL 
+      // bằng credentials từ Metered.ca (xem TURN_SERVER_SETUP.md)
       const pc = new RTCPeerConnection({
         iceServers: [
+          // STUN servers (miễn phí)
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
+          { urls: 'stun:stun1.l.google.com:19302' },
+          // TURN servers (Metered.ca - miễn phí, chỉ cần Gmail)
+          {
+            urls: "stun:stun.relay.metered.ca:80",
+          },
+          {
+            urls: "turn:global.relay.metered.ca:80",
+            username: "YOUR_METERED_USERNAME",  // ← Thay bằng username của bạn
+            credential: "YOUR_METERED_CREDENTIAL", // ← Thay bằng credential của bạn
+          },
+          {
+            urls: "turn:global.relay.metered.ca:80?transport=tcp",
+            username: "YOUR_METERED_USERNAME",
+            credential: "YOUR_METERED_CREDENTIAL",
+          },
+          {
+            urls: "turn:global.relay.metered.ca:443",
+            username: "YOUR_METERED_USERNAME",
+            credential: "YOUR_METERED_CREDENTIAL",
+          },
+          {
+            urls: "turns:global.relay.metered.ca:443?transport=tcp",
+            username: "YOUR_METERED_USERNAME",
+            credential: "YOUR_METERED_CREDENTIAL",
+          }
+        ],
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require',
+        iceTransportPolicy: 'all'
       });
 
       setPeerConnection(pc);

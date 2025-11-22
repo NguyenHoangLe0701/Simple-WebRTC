@@ -29,9 +29,14 @@ public class WebRTCSignalController {
             String signalType = getStringSafe(signal, "type");
             String fromUserId = extractUserId(signal);
             
-            System.out.println("🎯 WEBRTC SIGNAL - Room: " + roomId);
-            System.out.println("📨 Type: " + signalType);
-            System.out.println("👤 From: " + fromUserId);
+            // 🔇 GIẢM LOG: Chỉ log các signal quan trọng, không log ICE candidates
+            boolean isImportantSignal = signalType != null && 
+                (signalType.equals("join") || signalType.equals("leave") || 
+                 signalType.equals("offer") || signalType.equals("answer"));
+            
+            if (isImportantSignal) {
+                System.out.println("🎯 WEBRTC SIGNAL - Room: " + roomId + ", Type: " + signalType + ", From: " + fromUserId);
+            }
             
             // Validate signal type
             if (!isValidSignalType(signalType)) {
@@ -43,9 +48,21 @@ public class WebRTCSignalController {
             switch (signalType) {
                 case "join" -> handleJoinSignal(roomId, signal);
                 case "leave" -> handleLeaveSignal(roomId, signal);
-                case "offer", "answer", "ice-candidate" -> 
-                    System.out.println("🔊 Broadcasting WebRTC signal: " + signalType);
-                default -> System.err.println("⚠️ Unhandled signal type: " + signalType);
+                case "offer", "answer" -> {
+                    // Chỉ log cho offer/answer, không log cho ice-candidate
+                    if (isImportantSignal) {
+                        System.out.println("✅ Broadcasting " + signalType + " to " + roomId);
+                    }
+                }
+                case "ice-candidate" -> {
+                    // 🔇 KHÔNG LOG ICE CANDIDATES - quá nhiều
+                    // ICE candidates được xử lý im lặng
+                }
+                default -> {
+                    if (isImportantSignal) {
+                        System.err.println("⚠️ Unhandled signal type: " + signalType);
+                    }
+                }
             }
             
             // 🆕 FIX: Tạo signal mới để tránh modify original
@@ -58,7 +75,11 @@ public class WebRTCSignalController {
             
             // Broadcast to room
             messagingTemplate.convertAndSend("/topic/signal/" + roomId, broadcastSignal);
-            System.out.println("✅ Signal broadcasted to " + roomId + ", type: " + signalType);
+            
+            // 🔇 CHỈ LOG CÁC SIGNAL QUAN TRỌNG
+            // if (isImportantSignal) {
+            //     System.out.println("✅ Signal broadcasted to " + roomId + ", type: " + signalType);
+            // }
             
         } catch (Exception e) {
             System.err.println("❌ Signal handling error: " + e.getMessage());
@@ -174,10 +195,16 @@ public class WebRTCSignalController {
         );
     }
     
-    // 🆕 FIX: Extract user ID với nhiều fallback hơn
+    // 🆕 FIX: Extract user ID với nhiều fallback hơn - ƯU TIÊN fromUserId
     private String extractUserId(Map<String, Object> signal) {
         try {
-            // Thử lấy từ user object trước - SỬA: sử dụng pattern matching
+            // 🔥 ƯU TIÊN 1: Lấy trực tiếp từ fromUserId (quan trọng cho ICE candidates)
+            Object fromUserIdObj = signal.get("fromUserId");
+            if (fromUserIdObj != null) {
+                return fromUserIdObj.toString();
+            }
+            
+            // Fallback 2: Thử lấy từ user object
             Object userObj = signal.get("user");
             if (userObj instanceof Map<?, ?> userMap) {
                 Object userId = userMap.get("id");
@@ -188,10 +215,11 @@ public class WebRTCSignalController {
                 if (username != null) return username.toString();
             }
             
-            // Fallback: thử lấy trực tiếp từ signal
+            // Fallback 3: Thử lấy trực tiếp từ signal
             Object directUserId = signal.get("userId");
             if (directUserId != null) return directUserId.toString();
             
+            // Fallback 4: Thử lấy từ "from"
             Object fromUser = signal.get("from");
             if (fromUser != null) return fromUser.toString();
             

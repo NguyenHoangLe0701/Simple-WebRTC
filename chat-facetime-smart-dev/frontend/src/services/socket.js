@@ -31,7 +31,7 @@ class SocketService {
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
         wsUrl = 'http://localhost:8080/ws';
       } else {
-        wsUrl = 'https://simple-webrtc-4drq.onrender.com/ws';
+        wsUrl = 'https://simple-webrtc-dockerservice.onrender.com/ws';
       }
 
       console.log('🔗 Connecting to WebSocket:', wsUrl); 
@@ -158,6 +158,14 @@ console.error('⏰ Connection timeout after 15s'); // Giữ log lỗi
       await this.send(`/app/signal/${roomId}`, signalMessage);
       return true;
     } catch (error) {
+      // 🆕 FIX: Suppress lỗi runtime.lastError từ Chrome extensions (harmless)
+      if (error?.message?.includes('runtime.lastError') || 
+          error?.message?.includes('Receiving end does not exist') ||
+          error?.message?.includes('Extension context invalidated')) {
+        // Đây là lỗi từ browser extension, không phải từ code của chúng ta
+        // Có thể bỏ qua an toàn
+        return false;
+      }
       console.error('❌ Error sending signal:', error);
       throw error;
     }
