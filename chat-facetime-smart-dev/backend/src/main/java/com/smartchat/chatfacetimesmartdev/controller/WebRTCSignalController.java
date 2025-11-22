@@ -34,9 +34,10 @@ public class WebRTCSignalController {
                 (signalType.equals("join") || signalType.equals("leave") || 
                  signalType.equals("offer") || signalType.equals("answer"));
             
-            if (isImportantSignal) {
-                System.out.println("🎯 WEBRTC SIGNAL - Room: " + roomId + ", Type: " + signalType + ", From: " + fromUserId);
-            }
+            // Chỉ log trong development mode hoặc khi có vấn đề
+            // if (isImportantSignal) {
+            //     System.out.println("🎯 WEBRTC SIGNAL - Room: " + roomId + ", Type: " + signalType + ", From: " + fromUserId);
+            // }
             
             // Validate signal type
             if (!isValidSignalType(signalType)) {
@@ -49,10 +50,10 @@ public class WebRTCSignalController {
                 case "join" -> handleJoinSignal(roomId, signal);
                 case "leave" -> handleLeaveSignal(roomId, signal);
                 case "offer", "answer" -> {
-                    // Chỉ log cho offer/answer, không log cho ice-candidate
-                    if (isImportantSignal) {
-                        System.out.println("✅ Broadcasting " + signalType + " to " + roomId);
-                    }
+                    // 🔇 KHÔNG LOG - quá nhiều trong production
+                    // if (isImportantSignal) {
+                    //     System.out.println("✅ Broadcasting " + signalType + " to " + roomId);
+                    // }
                 }
                 case "ice-candidate" -> {
                     // 🔇 KHÔNG LOG ICE CANDIDATES - quá nhiều
@@ -106,7 +107,8 @@ public class WebRTCSignalController {
                     );
                     
                     presenceService.addOrUpdate(roomId, userPresence);
-                    System.out.println("✅ Added user to WebRTC presence: " + userId + " in room: " + roomId);
+                    // 🔇 GIẢM LOG - chỉ log lỗi
+                    // System.out.println("✅ Added user to WebRTC presence: " + userId + " in room: " + roomId);
                     
                     // 🆕 FIX: Broadcast presence update với danh sách users
                     broadcastFullPresenceUpdate(roomId);
@@ -128,7 +130,8 @@ public class WebRTCSignalController {
             
             if (userId != null && !userId.equals("unknown")) {
                 presenceService.remove(roomId, userId);
-                System.out.println("✅ Removed user from WebRTC presence: " + userId + " from room: " + roomId);
+                // 🔇 GIẢM LOG - chỉ log lỗi
+                // System.out.println("✅ Removed user from WebRTC presence: " + userId + " from room: " + roomId);
                 
                 // 🆕 FIX: Broadcast presence update với danh sách users
                 broadcastFullPresenceUpdate(roomId);
@@ -155,7 +158,8 @@ public class WebRTCSignalController {
             presenceUpdate.put("message", "Presence updated via WebRTC signaling");
             
             messagingTemplate.convertAndSend("/topic/presence/" + roomId, presenceUpdate);
-            System.out.println("📊 WebRTC presence update broadcasted for room: " + roomId + " with " + userList.size() + " users");
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("📊 WebRTC presence update broadcasted for room: " + roomId + " with " + userList.size() + " users");
             
         } catch (Exception e) {
             System.err.println("❌ Error broadcasting presence update: " + e.getMessage());
@@ -174,7 +178,8 @@ public class WebRTCSignalController {
             presenceUpdate.put("message", "Presence updated via WebRTC signaling");
             
             messagingTemplate.convertAndSend("/topic/presence/" + roomId, presenceUpdate);
-            System.out.println("📊 Basic presence update broadcasted for room: " + roomId);
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("📊 Basic presence update broadcasted for room: " + roomId);
             
         } catch (Exception e) {
             System.err.println("❌ Error broadcasting basic presence update: " + e.getMessage());

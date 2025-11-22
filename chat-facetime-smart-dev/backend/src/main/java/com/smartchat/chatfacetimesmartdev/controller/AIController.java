@@ -20,7 +20,8 @@ public class AIController {
     @PostMapping("/chat")
     public ResponseEntity<Map<String, String>> handleChat(@RequestBody AIChatRequest request) {
 
-        System.out.println("🤖 AIController nhận được prompt: " + request.prompt());
+        // 🔇 GIẢM LOG - chỉ log lỗi
+        // System.out.println("🤖 AIController nhận được prompt: " + request.prompt());
 
         String aiResponse = aiService.getAIResponse(request.prompt());
         return ResponseEntity.ok(Map.of("response", aiResponse));
