@@ -309,6 +309,10 @@ class WebRTCService {
     return pc ? pc.connectionState : 'disconnected';
   }
 
+  hasPeerConnection(userId) {
+    return this.peerConnections.has(userId);
+  }
+
   closePeerConnection(userId) {
     const pc = this.peerConnections.get(userId);
     if (pc) {

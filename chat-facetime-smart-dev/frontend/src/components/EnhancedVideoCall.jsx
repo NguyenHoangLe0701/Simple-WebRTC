@@ -42,9 +42,12 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   }, [isActive, isInitialized]);
 
-  // 🆕 FIX: Setup WebRTC event handlers - chỉ chạy 1 lần
+  // 🆕 FIX: Setup WebRTC event handlers và set roomId
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !roomId) return;
+
+    // Set roomId cho webrtcService
+    webrtcService.setRoomId(roomId);
 
     // Setup WebRTC event handlers
     webrtcService.setOnRemoteStream((userId, stream) => {
@@ -72,7 +75,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       webrtcService.setOnIceCandidate(null);
       webrtcService.setOnConnectionStateChange(null);
     };
-  }, [isActive]);
+  }, [isActive, roomId]);
 
   // 🆕 FIX: Set local stream cho WebRTC service
   useEffect(() => {
@@ -176,7 +179,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
-  // 🆕 FIX: Hàm khởi tạo signaling đơn giản hơn
+  // 🆕 FIX: Hàm khởi tạo signaling với presence support
   const initializeSignaling = async () => {
     if (!isActive || !roomId || !localStream) {
       return;
@@ -192,6 +195,9 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
       // Subscribe to signaling
       await socketService.subscribeToSignaling(roomId, handleSignalingMessage);
+
+      // Subscribe to presence để nhận danh sách users hiện có
+      await socketService.subscribeToPresence(roomId, handlePresenceMessage);
 
       // Join room
       await socketService.joinRoomWithSignaling(roomId, currentUser);
@@ -241,19 +247,27 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   };
 
   // 🆕 FIX: Xử lý signaling message
-  const handleSignalingMessage = async (data) => {
-    const currentUserId = currentUser?.id || currentUser?.username;
-    const senderId = data.user?.id;
-
-    // Bỏ qua message từ chính mình
-    if (senderId === currentUserId) {
-      return;
-    }
-
+  const handleSignalingMessage = async (frame) => {
     try {
+      // Parse message - có thể là frame với body hoặc object trực tiếp
+      let data = frame;
+      if (frame.body) {
+        data = typeof frame.body === 'string' ? JSON.parse(frame.body) : frame.body;
+      } else if (typeof frame === 'string') {
+        data = JSON.parse(frame);
+      }
+
+      const currentUserId = currentUser?.id || currentUser?.username;
+      const senderId = data.user?.id || data.fromUserId || data.userId;
+
+      // Bỏ qua message từ chính mình
+      if (senderId === currentUserId) {
+        return;
+      }
+
       switch (data.type) {
         case 'join':
-          await handleUserJoin(data.user);
+          await handleUserJoin(data.user || { id: senderId, username: data.username });
           break;
           
         case 'offer':
@@ -269,7 +283,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           break;
           
         case 'leave':
-          handleUserLeave(data.user);
+          handleUserLeave(data.user || { id: senderId, username: data.username });
           break;
       }
     } catch (error) {
@@ -277,27 +291,107 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     }
   };
 
+  // 🆕 FIX: Xử lý presence message để nhận danh sách users hiện có
+  const handlePresenceMessage = async (message) => {
+    try {
+      let users = [];
+      
+      // Parse message - có thể là object hoặc string
+      if (typeof message === 'string') {
+        const parsed = JSON.parse(message);
+        users = parsed.users || parsed.data?.users || [];
+      } else if (message.body) {
+        const parsed = JSON.parse(message.body);
+        users = parsed.users || parsed.data?.users || [];
+      } else {
+        users = message.users || message.data?.users || [];
+      }
+
+      if (!Array.isArray(users) || users.length === 0) {
+        return;
+      }
+
+      const currentUserId = currentUser?.id || currentUser?.username;
+      
+      // Lọc ra những user khác (không bao gồm chính mình)
+      const otherUsers = users.filter(u => {
+        const uid = u.id || u.userId || u.username;
+        return uid && uid !== currentUserId;
+      });
+
+      // Cập nhật participants
+      setParticipants(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const newUsers = otherUsers.filter(u => {
+          const uid = u.id || u.userId || u.username;
+          return uid && !existingIds.has(uid);
+        });
+        return [...prev, ...newUsers];
+      });
+
+      // Tạo offer cho TẤT CẢ users hiện có trong room (chỉ khi đã có localStream)
+      if (localStream && webrtcService.localStream) {
+        for (const user of otherUsers) {
+          const userId = user.id || user.userId || user.username;
+          if (!userId) continue;
+
+          try {
+            // Kiểm tra xem đã có peer connection chưa
+            if (!webrtcService.hasPeerConnection(userId)) {
+              const offer = await webrtcService.createOffer(userId);
+              
+              if (offer) {
+                await sendSignal({
+                  type: 'offer',
+                  offer: offer,
+                  targetUserId: userId
+                });
+              }
+            }
+          } catch (error) {
+            console.error(`❌ Error creating offer for ${userId}:`, error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error handling presence message:', error);
+    }
+  };
+
   // 🆕 FIX: Xử lý user join
   const handleUserJoin = async (user) => {
-    const userId = user.id;
+    const userId = user.id || user.userId || user.username;
+    if (!userId) return;
+
+    const currentUserId = currentUser?.id || currentUser?.username;
+    if (userId === currentUserId) return;
 
     // Thêm vào participants
     setParticipants(prev => {
-      const exists = prev.find(p => p.id === userId);
+      const exists = prev.find(p => {
+        const pid = p.id || p.userId || p.username;
+        return pid === userId;
+      });
       if (exists) return prev;
       return [...prev, user];
     });
 
-    // Tạo offer cho user mới
+    // Tạo offer cho user mới (chỉ nếu chưa có peer connection và đã có localStream)
+    if (!localStream || !webrtcService.localStream) {
+      return;
+    }
+
     try {
-      const offer = await webrtcService.createOffer(userId);
-      
-      if (offer) {
-        await sendSignal({
-          type: 'offer',
-          offer: offer,
-          targetUserId: userId
-        });
+      if (!webrtcService.hasPeerConnection(userId)) {
+        const offer = await webrtcService.createOffer(userId);
+        
+        if (offer) {
+          await sendSignal({
+            type: 'offer',
+            offer: offer,
+            targetUserId: userId
+          });
+        }
       }
       
     } catch (error) {
