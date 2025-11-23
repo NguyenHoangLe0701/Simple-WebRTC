@@ -119,10 +119,21 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       setConnectionStatus(state);
     });
 
+    // 🔥 FIX: Callback để gửi offer khi ICE restart
+    webrtcService.setOnIceRestartOffer((userId, offer) => {
+      console.log(`📤 Sending ICE restart offer to ${userId}`);
+      sendSignalSafely({
+        type: 'offer',
+        offer: offer,
+        targetUserId: userId
+      });
+    });
+
     return () => {
       webrtcService.setOnRemoteStream(null);
       webrtcService.setOnIceCandidate(null);
       webrtcService.setOnConnectionStateChange(null);
+      webrtcService.setOnIceRestartOffer(null);
       
       // 🆕 FIX: Cleanup ICE candidate timers
       iceCandidateTimer.current.forEach(timer => clearTimeout(timer));

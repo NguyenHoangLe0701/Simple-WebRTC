@@ -27,14 +27,11 @@ class WebRTCService {
       iceServers: [
         // 🔥 PRIMARY: Metered.ca TURN (chống lag, ổn định)
         {
-          urls: "turn:standard.relay.metered.ca:80",
-          username: "cb123ac328807f8b8037b50e",
-          credential: "YbrS2Sch00jYJFGn"
-        },
-        
-        // 🔥 SECONDARY: Metered.ca TURN TLS 
-        {
-          urls: "turn:standard.relay.metered.ca:443",
+          urls: [
+            "turn:standard.relay.metered.ca:80",
+            "turn:standard.relay.metered.ca:443",
+            "turns:standard.relay.metered.ca:443?transport=tcp"
+          ],
           username: "cb123ac328807f8b8037b50e",
           credential: "YbrS2Sch00jYJFGn"
         },
@@ -55,7 +52,9 @@ class WebRTCService {
         // 🔥 BACKUP 4: Additional public STUN servers for better connectivity
         { urls: 'stun:stun.stunprotocol.org:3478' },
         { urls: 'stun:stun.voiparound.com' },
-        { urls: 'stun:stun.voipbuster.com' }
+        { urls: 'stun:stun.voipbuster.com' },
+        { urls: 'stun:stun.ekiga.net' },
+        { urls: 'stun:stun.fwdnet.net' }
       ],
       
       // 🔥 Optimization cho ổn định và tốc độ kết nối
@@ -73,6 +72,7 @@ class WebRTCService {
     this.onIceCandidate = null;
     this.onConnectionStateChange = null;
     this.onIceConnectionStateChange = null;
+    this.onIceRestartOffer = null; // 🔥 FIX: Callback để gửi offer khi ICE restart
   }
 
   setRoomId(roomId) {
@@ -473,6 +473,16 @@ class WebRTCService {
       let pc = this.peerConnections.get(userId);
       const currentState = pc?.signalingState;
       
+      // 🔥 FIX: Kiểm tra xem có phải là ICE restart offer không (có ice-ufrag mới)
+      const isIceRestart = offer.sdp && offer.sdp.includes('ice-ufrag');
+      const existingOffer = pc?.localDescription?.sdp;
+      const isNewIceRestart = isIceRestart && existingOffer && 
+        offer.sdp.match(/ice-ufrag:(\S+)/)?.[1] !== existingOffer.match(/ice-ufrag:(\S+)/)?.[1];
+      
+      if (isNewIceRestart) {
+        console.log(`🔄 Received ICE restart offer from ${userId}`);
+      }
+      
       // 🔥 FIX: Xử lý offer collision - khi cả 2 users cùng tạo offer
       // Nếu đã có local offer (have-local-offer), rollback và xử lý remote offer
       if (currentState === 'have-local-offer') {
@@ -504,7 +514,7 @@ class WebRTCService {
       if (pc.signalingState === 'stable') {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
-          console.log(`✅ Set remote offer for ${userId}`);
+          console.log(`✅ Set remote offer for ${userId}${isNewIceRestart ? ' (ICE restart)' : ''}`);
         } catch (setError) {
           // Nếu lỗi khi set remote description, đóng và tạo lại
           if (setError.name === 'InvalidAccessError' || setError.name === 'InvalidStateError') {
@@ -529,7 +539,7 @@ class WebRTCService {
       // Điều này đảm bảo thứ tự m-lines khớp với offer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      console.log(`✅ Created and set local answer for ${userId}`);
+      console.log(`✅ Created and set local answer for ${userId}${isNewIceRestart ? ' (ICE restart)' : ''}`);
       
       // 🔥 FIX: Xử lý các pending ICE candidates sau khi set local description
       await this.processPendingIceCandidates(userId, pc);
@@ -817,6 +827,15 @@ class WebRTCService {
       // 🔥 FIX: Tạo offer với iceRestart để force renegotiation
       const offer = await pc.createOffer({ iceRestart: true });
       await pc.setLocalDescription(offer);
+      console.log(`✅ Created ICE restart offer for ${userId}`);
+      
+      // 🔥 FIX: Gửi offer mới qua callback để component gửi đi
+      if (this.onIceRestartOffer) {
+        this.onIceRestartOffer(userId, pc.localDescription);
+        console.log(`📤 ICE restart offer sent for ${userId}`);
+      } else {
+        console.warn(`⚠️ No onIceRestartOffer callback - offer not sent for ${userId}`);
+      }
       
       // 🔥 FIX: Chờ một chút để ICE gathering bắt đầu
       await this.waitForIceGathering(pc, userId, 2000);
@@ -1056,6 +1075,10 @@ class WebRTCService {
 
   setOnIceConnectionStateChange(callback) {
     this.onIceConnectionStateChange = callback;
+  }
+
+  setOnIceRestartOffer(callback) {
+    this.onIceRestartOffer = callback;
   }
 }
 
