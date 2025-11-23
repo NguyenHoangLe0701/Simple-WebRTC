@@ -36,27 +36,23 @@ class WebRTCService {
           credential: "YbrS2Sch00jYJFGn"
         },
         
-        // 🔥 BACKUP 1: OpenRelay (free, public TURN server)
-        {
-          urls: [
-            "turn:openrelay.metered.ca:80",
-            "turn:openrelay.metered.ca:443",
-            "turn:openrelay.metered.ca:443?transport=tcp"
-          ]
-        },
-        
-        // 🔥 BACKUP 2: Twilio STUN (reliable)
+        // 🔥 BACKUP 1: Twilio STUN (reliable, public, no credentials needed)
         { urls: 'stun:global.stun.twilio.com:3478' },
         
-        // 🔥 BACKUP 3: Google STUN servers (multiple for redundancy)
+        // 🔥 BACKUP 2: Google STUN servers (multiple for redundancy, public, no credentials)
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
         { urls: 'stun:stun4.l.google.com:19302' },
         
-        // 🔥 BACKUP 4: Mozilla STUN
-        { urls: 'stun:stun.services.mozilla.com:3478' }
+        // 🔥 BACKUP 3: Mozilla STUN (public, no credentials)
+        { urls: 'stun:stun.services.mozilla.com:3478' },
+        
+        // 🔥 BACKUP 4: Additional public STUN servers for better connectivity
+        { urls: 'stun:stun.stunprotocol.org:3478' },
+        { urls: 'stun:stun.voiparound.com' },
+        { urls: 'stun:stun.voipbuster.com' }
       ],
       
       // 🔥 Optimization cho ổn định và tốc độ kết nối
@@ -85,11 +81,20 @@ class WebRTCService {
   }
 
   createPeerConnection(userId) {
-    if (this.peerConnections.has(userId)) {
-      return this.peerConnections.get(userId);
+    // 🔥 FIX: Kiểm tra và trả về connection hiện có nếu đã tồn tại và chưa đóng
+    const existingPc = this.peerConnections.get(userId);
+    if (existingPc && existingPc.signalingState !== 'closed') {
+      return existingPc;
+    }
+    
+    // 🔥 FIX: Nếu connection cũ đã đóng, xóa nó trước
+    if (existingPc && existingPc.signalingState === 'closed') {
+      this.peerConnections.delete(userId);
     }
 
     try {
+      // 🔥 FIX: Tạo peer connection mới với config riêng cho mỗi user
+      // Mỗi user có một peer connection độc lập để hỗ trợ multi-peer
       const pc = new RTCPeerConnection(this.config);
 
       // 🔥 QUAN TRỌNG: Thêm tracks theo thứ tự nhất quán (audio trước, video sau)
@@ -260,12 +265,17 @@ class WebRTCService {
       }
       
       // Tạo peer connection mới nếu chưa có hoặc đã đóng
-      if (!pc) {
+      if (!pc || pc.signalingState === 'closed') {
+        if (pc && pc.signalingState === 'closed') {
+          // Xóa connection cũ trước khi tạo mới
+          this.closePeerConnection(userId);
+        }
         pc = this.createPeerConnection(userId);
       }
       
       // 🔥 FIX: Đảm bảo peer connection đã được lưu vào Map
-      if (!this.peerConnections.has(userId)) {
+      // createPeerConnection đã tự động lưu, nhưng double-check để an toàn
+      if (!this.peerConnections.has(userId) || this.peerConnections.get(userId) !== pc) {
         this.peerConnections.set(userId, pc);
       }
       
