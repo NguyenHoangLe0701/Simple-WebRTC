@@ -110,7 +110,13 @@ class WebRTCService {
         // Add audio tracks trước
         audioTracks.forEach(track => {
           try {
+            // 🔥 FIX: Đảm bảo audio track được enable trước khi add
+            if (!track.enabled) {
+              console.log(`🔊 Enabling local audio track for ${userId}`);
+              track.enabled = true;
+            }
             pc.addTrack(track, this.localStream);
+            console.log(`✅ Added audio track for ${userId}, enabled: ${track.enabled}, readyState: ${track.readyState}`);
           } catch (error) {
             console.error('❌ Error adding audio track:', error);
           }
@@ -130,10 +136,22 @@ class WebRTCService {
       pc.ontrack = (event) => {
         const [remoteStream] = event.streams;
         if (remoteStream) {
-          console.log('📹 Received remote stream from:', userId, {
-            audioTracks: remoteStream.getAudioTracks().length,
-            videoTracks: remoteStream.getVideoTracks().length
+          // 🔥 FIX: Đảm bảo tất cả audio tracks được enable
+          const audioTracks = remoteStream.getAudioTracks();
+          audioTracks.forEach(track => {
+            if (!track.enabled) {
+              console.log(`🔊 Enabling audio track for ${userId}`);
+              track.enabled = true;
+            }
           });
+          
+          console.log('📹 Received remote stream from:', userId, {
+            audioTracks: audioTracks.length,
+            videoTracks: remoteStream.getVideoTracks().length,
+            audioEnabled: audioTracks.every(t => t.enabled),
+            audioReadyState: audioTracks.map(t => t.readyState)
+          });
+          
           this.remoteStreams.set(userId, remoteStream);
           
           if (this.onRemoteStream) {

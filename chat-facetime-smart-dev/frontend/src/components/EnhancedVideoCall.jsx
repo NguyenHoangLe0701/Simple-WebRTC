@@ -145,12 +145,27 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Set local stream cho WebRTC service
   useEffect(() => {
     if (localStream) {
+      // 🔥 FIX: Đảm bảo tất cả audio tracks được enable trước khi set
+      const audioTracks = localStream.getAudioTracks();
+      audioTracks.forEach(track => {
+        if (!track.enabled) {
+          console.log('🔊 Enabling local audio track');
+          track.enabled = true;
+        }
+      });
+      
       webrtcService.setLocalStream(localStream);
       
       // Update local video
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStream;
       }
+      
+      console.log('✅ Local stream set with audio tracks:', {
+        audioCount: audioTracks.length,
+        audioEnabled: audioTracks.every(t => t.enabled),
+        audioReadyState: audioTracks.map(t => t.readyState)
+      });
     }
   }, [localStream]);
 
@@ -187,6 +202,13 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           };
           stream = await navigator.mediaDevices.getUserMedia(videoConstraints);
           hasVideo = stream.getVideoTracks().length > 0;
+          // 🔥 FIX: Đảm bảo audio tracks được enable ngay từ đầu
+          stream.getAudioTracks().forEach(track => {
+            if (!track.enabled) {
+              console.log('🔊 Enabling audio track after getUserMedia');
+              track.enabled = true;
+            }
+          });
         } catch (videoError) {
           // Nếu video lỗi, thử fallback chỉ audio
           if (videoError.name === 'NotFoundError' || videoError.name === 'NotReadableError' || videoError.name === 'OverconstrainedError') {
@@ -200,6 +222,13 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
                 video: false
               });
               hasVideo = false;
+              // 🔥 FIX: Đảm bảo audio tracks được enable
+              stream.getAudioTracks().forEach(track => {
+                if (!track.enabled) {
+                  console.log('🔊 Enabling audio track after getUserMedia (fallback)');
+                  track.enabled = true;
+                }
+              });
             } catch (audioError) {
               // Nếu cả audio cũng lỗi, throw error
               throw audioError;
@@ -220,6 +249,13 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
         hasVideo = false;
+        // 🔥 FIX: Đảm bảo audio tracks được enable
+        stream.getAudioTracks().forEach(track => {
+          if (!track.enabled) {
+            console.log('🔊 Enabling audio track after getUserMedia (voice call)');
+            track.enabled = true;
+          }
+        });
       }
 
       setPermissionStatus('granted');
@@ -879,6 +915,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           {remoteVideos.map(([userId, stream]) => {
             const participant = participants.find(p => p.id === userId);
             const hasVideo = stream && stream.getVideoTracks().length > 0;
+            const hasAudio = stream && stream.getAudioTracks().length > 0;
             
             return (
               <div key={userId} className={`relative bg-black rounded-xl overflow-hidden border-2 border-green-500 ${getVideoSize()}`}>
@@ -894,11 +931,39 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
                         // Chỉ set lại nếu khác nhau để tránh re-render không cần thiết
                         if (videoRef.srcObject !== stream) {
                           videoRef.srcObject = stream;
-                          // 🔥 Đảm bảo video play
-                          videoRef.play().catch(err => {
+                          // 🔥 FIX: Đảm bảo audio được enable và play
+                          const audioTracks = stream.getAudioTracks();
+                          audioTracks.forEach(track => {
+                            if (!track.enabled) {
+                              console.log(`🔊 Enabling audio track for ${userId} in video element`);
+                              track.enabled = true;
+                            }
+                          });
+                          // 🔥 FIX: Log audio state để debug
+                          if (audioTracks.length > 0) {
+                            console.log(`🔊 Audio tracks for ${userId}:`, {
+                              count: audioTracks.length,
+                              enabled: audioTracks.every(t => t.enabled),
+                              readyState: audioTracks.map(t => t.readyState),
+                              muted: videoRef.muted
+                            });
+                          }
+                          // 🔥 Đảm bảo video play (bao gồm audio)
+                          videoRef.play().then(() => {
+                            console.log(`✅ Video (with audio) playing for ${userId}`);
+                          }).catch(err => {
                             // Bỏ qua lỗi play nếu đã bị pause hoặc không ready
                             if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
                               console.warn('Video play error:', err);
+                            }
+                          });
+                        }
+                        // 🔥 FIX: Đảm bảo audio luôn được enable mỗi lần render
+                        if (videoRef.srcObject === stream) {
+                          const audioTracks = stream.getAudioTracks();
+                          audioTracks.forEach(track => {
+                            if (!track.enabled) {
+                              track.enabled = true;
                             }
                           });
                         }
@@ -906,12 +971,61 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
                     }}
                   />
                 ) : (
-                  // Voice call: hiển thị avatar
-                  <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-blue-600 flex items-center justify-center">
-                    <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-white text-4xl font-bold">
-                      {(participant?.fullName || participant?.username || 'U').charAt(0).toUpperCase()}
+                  // Voice call: hiển thị avatar + audio element riêng
+                  <>
+                    <div className="absolute inset-0 bg-gradient-to-br from-green-600 to-blue-600 flex items-center justify-center">
+                      <div className="w-32 h-32 bg-white/20 rounded-full flex items-center justify-center text-white text-4xl font-bold">
+                        {(participant?.fullName || participant?.username || 'U').charAt(0).toUpperCase()}
+                      </div>
                     </div>
-                  </div>
+                    {/* 🔥 FIX: Audio element riêng cho voice call để đảm bảo audio được play */}
+                    {hasAudio && (
+                      <audio
+                        autoPlay
+                        ref={(audioRef) => {
+                          if (audioRef && stream) {
+                            if (audioRef.srcObject !== stream) {
+                              audioRef.srcObject = stream;
+                              // 🔥 FIX: Đảm bảo audio tracks được enable
+                              const audioTracks = stream.getAudioTracks();
+                              audioTracks.forEach(track => {
+                                if (!track.enabled) {
+                                  console.log(`🔊 Enabling audio track for ${userId} in audio element`);
+                                  track.enabled = true;
+                                }
+                              });
+                              // 🔥 FIX: Log audio state để debug
+                              if (audioTracks.length > 0) {
+                                console.log(`🔊 Audio tracks for ${userId} (audio element):`, {
+                                  count: audioTracks.length,
+                                  enabled: audioTracks.every(t => t.enabled),
+                                  readyState: audioTracks.map(t => t.readyState),
+                                  muted: audioRef.muted
+                                });
+                              }
+                              // 🔥 Đảm bảo audio play
+                              audioRef.play().then(() => {
+                                console.log(`✅ Audio playing for ${userId}`);
+                              }).catch(err => {
+                                if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
+                                  console.warn('Audio play error:', err);
+                                }
+                              });
+                            }
+                            // 🔥 FIX: Đảm bảo audio luôn được enable
+                            if (audioRef.srcObject === stream) {
+                              const audioTracks = stream.getAudioTracks();
+                              audioTracks.forEach(track => {
+                                if (!track.enabled) {
+                                  track.enabled = true;
+                                }
+                              });
+                            }
+                          }
+                        }}
+                      />
+                    )}
+                  </>
                 )}
                 <div className="absolute bottom-3 left-3 bg-black/80 text-white px-3 py-1.5 rounded-lg text-sm font-medium">
                   👥 {participant?.fullName || participant?.username || userId || 'Remote'}
