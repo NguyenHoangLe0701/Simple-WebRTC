@@ -1,242 +1,141 @@
 package com.smartchat.chatfacetimesmartdev.service;
 
 import com.smartchat.chatfacetimesmartdev.dto.CodeExecutionResult;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.time.Duration;
+import java.util.Map;
 
 @Service
 public class DockerCodeExecutionService {
 
-    private static final int EXECUTION_TIMEOUT_SECONDS = 30;
-    // Image duy nhất cho sandbox
-    private static final String EXECUTOR_IMAGE = "anhphu4784/code-executor:latest";
+    private final RestTemplate restTemplate;
+    private final String sandboxUrl;
 
-    // Phương thức chung để thực thi code trong container
-    private CodeExecutionResult executeInContainer(String[] command, String code, String fileName) {
-        Process process = null;
+    public DockerCodeExecutionService() {
+
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5000);
+        factory.setReadTimeout(20000);
+
+        this.restTemplate = new RestTemplate(factory);
+
+        String envUrl = System.getenv("SANDBOX_URL");
+        this.sandboxUrl = (envUrl == null || envUrl.isBlank())
+                ? "https://code-executor-latest-1.onrender.com"
+                : envUrl;
+    }
+
+    private CodeExecutionResult callSandbox(String endpoint, Map<String, String> payload) {
         try {
-            ProcessBuilder processBuilder = new ProcessBuilder(command);
-            process = processBuilder.start();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
 
-            // Ghi code vào stdin của process nếu cần
-            if (code != null && !code.isEmpty()) {
-                try (var writer = process.getOutputStream()) {
-                    writer.write(code.getBytes());
-                    writer.flush();
-                }
+            HttpEntity<Map<String, String>> request = new HttpEntity<>(payload, headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    endpoint, HttpMethod.POST, request, Map.class
+            );
+
+            // ❗ HTTP không OK
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                return new CodeExecutionResult(
+                        "", "Sandbox returned: " + response.getStatusCode(), false
+                );
             }
 
-            boolean completed = process.waitFor(EXECUTION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-
-            if (!completed) {
-                process.destroyForcibly();
-                return new CodeExecutionResult("", "Execution timeout after " + EXECUTION_TIMEOUT_SECONDS + " seconds", false);
+            Map<String, Object> body = response.getBody();
+            if (body == null) {
+                return new CodeExecutionResult("", "Sandbox returned empty response", false);
             }
 
-            String output = readInputStream(process);
-            String errors = readErrorStream(process);
-            int exitCode = process.exitValue();
+            String output = String.valueOf(body.getOrDefault("output", ""));
+            String error  = String.valueOf(body.getOrDefault("error", ""));
+            boolean success = Boolean.TRUE.equals(body.get("success"));
 
-            if (exitCode == 0) {
-                return new CodeExecutionResult(output, errors, true);
-            } else {
-                return new CodeExecutionResult(output, "Exit code: " + exitCode + "\nErrors: " + errors, false);
+            // ❗ Nếu error có nội dung → coi là lỗi code
+            if (error != null && !error.isBlank()) {
+                return new CodeExecutionResult(output, error, false);
             }
+
+            // ❗ Nếu sandbox báo không success
+            if (!success) {
+                return new CodeExecutionResult(output, "Execution failed", false);
+            }
+
+            // OK
+            return new CodeExecutionResult(output, "", true);
+
+        } catch (ResourceAccessException e) {
+            return new CodeExecutionResult("", "Timeout: " + e.getMessage(), false);
+
+        } catch (RestClientException e) {
+            return new CodeExecutionResult("", "Sandbox unreachable: " + e.getMessage(), false);
 
         } catch (Exception e) {
-            return new CodeExecutionResult("", "Execution error: " + e.getMessage(), false);
-        } finally {
-            if (process != null) {
-                process.destroy();
-            }
+            return new CodeExecutionResult("", "Internal error: " + e.getMessage(), false);
         }
     }
 
-    // Python execution
+    // ---- Languages ----
+
     public CodeExecutionResult executePython(String code, String fileName) {
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "100m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--read-only",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "python3", "-c", code
-        };
-        return executeInContainer(command, code, fileName);
+        return callSandbox(sandboxUrl + "/run/python", Map.of("code", code));
     }
 
-    // JavaScript execution
     public CodeExecutionResult executeJavaScript(String code, String fileName) {
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "100m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--read-only",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "node", "-e", code
-        };
-        return executeInContainer(command, code, fileName);
+        return callSandbox(sandboxUrl + "/run/javascript", Map.of("code", code));
     }
 
-    // Java execution
     public CodeExecutionResult executeJava(String code, String fileName) {
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "200m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "sh", "-c",
-                "cat > /tmp/Main.java && cd /tmp && javac Main.java && java Main"
-        };
-        return executeInContainer(command, code, fileName);
+        return callSandbox(sandboxUrl + "/run/java", Map.of("code", code));
     }
 
-    // C++ execution
     public CodeExecutionResult executeCpp(String code, String fileName) {
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "200m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "sh", "-c",
-                "cat > /tmp/main.cpp && cd /tmp && g++ -o main main.cpp && ./main"
-        };
-        return executeInContainer(command, code, fileName);
+        return callSandbox(sandboxUrl + "/run/cpp", Map.of("code", code));
     }
 
-    // HTML execution/validation
     public CodeExecutionResult executeHtml(String code, String fileName) {
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "50m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--read-only",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "sh", "-c",
-                "echo '" + escapeForShell(code) + "' > /tmp/index.html && echo 'HTML validation completed'"
-        };
-        CodeExecutionResult result = executeInContainer(command, null, fileName);
+        boolean ok = code.matches("(?s).*<html.*>.*</html>.*")
+                || code.matches("(?s).*<body.*>.*</body>.*")
+                || code.matches("(?s).*<div.*>.*</div>.*");
 
-        boolean hasBasicStructure = code.matches("(?s).*<html.*>.*</html>.*") ||
-                                    code.matches("(?s).*<body.*>.*</body>.*") ||
-                                    code.matches("(?s).*<div.*>.*</div>.*");
-
-        if (hasBasicStructure) {
-            return new CodeExecutionResult("HTML code structure is valid\n" + result.getOutput(), "", true);
-        } else {
-            return new CodeExecutionResult(result.getOutput(), "Warning: Basic HTML structure might be missing", true);
-        }
+        return new CodeExecutionResult(
+                ok ? "HTML appears valid" : "",
+                ok ? "" : "Invalid basic HTML structure",
+                ok
+        );
     }
 
-    // CSS execution/validation
     public CodeExecutionResult executeCss(String code, String fileName) {
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "50m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--read-only",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "sh", "-c",
-                "echo 'CSS validation completed'"
-        };
-        CodeExecutionResult result = executeInContainer(command, null, fileName);
-
-        boolean isValidSyntax = code.matches("(?s).*\\{[^}]*\\}.*") || code.trim().isEmpty();
-        if (isValidSyntax) {
-            return new CodeExecutionResult("CSS syntax appears valid\n" + result.getOutput(), "", true);
-        } else {
-            return new CodeExecutionResult(result.getOutput(), "Warning: CSS syntax might be invalid - missing braces or selectors", true);
-        }
+        boolean ok = code.matches("(?s).*\\{[^}]*\\}.*");
+        return new CodeExecutionResult(
+                ok ? "CSS valid" : "",
+                ok ? "" : "Possible CSS syntax error",
+                ok
+        );
     }
 
-    // JSON validation
     public CodeExecutionResult executeJson(String code, String fileName) {
-        String validationScript =
-                "const code = `" + escapeForJavaScript(code) + "`;\n" +
-                "try {\n" +
-                "  JSON.parse(code);\n" +
-                "  console.log('✅ Valid JSON');\n" +
-                "} catch(e) {\n" +
-                "  console.error('❌ Invalid JSON:', e.message);\n" +
-                "  process.exit(1);\n" +
-                "}";
-
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "50m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--read-only",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "node", "-e", validationScript
-        };
-        return executeInContainer(command, null, fileName);
+        try {
+            new com.fasterxml.jackson.databind.ObjectMapper().readTree(code);
+            return new CodeExecutionResult("Valid JSON", "", true);
+        } catch (Exception e) {
+            return new CodeExecutionResult("", "Invalid JSON: " + e.getMessage(), false);
+        }
     }
 
-    // SQL validation
     public CodeExecutionResult executeSql(String code, String fileName) {
-        String[] command = {
-                "docker", "run", "-i", "--rm",
-                "--memory", "100m",
-                "--cpus", "0.5",
-                "--network", "none",
-                "--read-only",
-                "--cap-drop=ALL",
-                EXECUTOR_IMAGE,
-                "sh", "-c",
-                "sqlite3 :memory: '.help' > /dev/null && echo 'SQLite is ready for SQL validation'"
-        };
-        CodeExecutionResult result = executeInContainer(command, null, fileName);
-
-        boolean hasSqlKeywords = code.toUpperCase().matches("(?s).*\\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER)\\b.*");
-        if (hasSqlKeywords) {
-            return new CodeExecutionResult("SQL syntax appears valid\n" + result.getOutput(), "", true);
-        } else {
-            return new CodeExecutionResult(result.getOutput(), "Warning: No SQL keywords detected - this might not be valid SQL", true);
-        }
-    }
-
-    // Utility methods
-    private String escapeForShell(String text) {
-        return text.replace("'", "'\\''")
-                   .replace("\"", "\\\"")
-                   .replace("`", "\\`")
-                   .replace("$", "\\$");
-    }
-
-    private String escapeForJavaScript(String text) {
-        return text.replace("\\", "\\\\")
-                   .replace("`", "\\`")
-                   .replace("$", "\\$");
-    }
-
-    private String readInputStream(Process process) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            return reader.lines().collect(Collectors.joining("\n"));
-        }
-    }
-
-    private String readErrorStream(Process process) throws IOException {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-            return reader.lines().collect(Collectors.joining("\n"));
-        }
+        boolean ok = code.toUpperCase().matches("(?s).*\\b(SELECT|INSERT|UPDATE|DELETE)\\b.*");
+        return new CodeExecutionResult(
+                ok ? "Likely valid SQL" : "",
+                ok ? "" : "No SQL keywords found",
+                ok
+        );
     }
 }
