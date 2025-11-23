@@ -91,6 +91,10 @@ class WebRTCService {
       pc.ontrack = (event) => {
         const [remoteStream] = event.streams;
         if (remoteStream) {
+          console.log('📹 Received remote stream from:', userId, {
+            audioTracks: remoteStream.getAudioTracks().length,
+            videoTracks: remoteStream.getVideoTracks().length
+          });
           this.remoteStreams.set(userId, remoteStream);
           
           if (this.onRemoteStream) {
@@ -111,26 +115,37 @@ class WebRTCService {
       // Theo dõi connection state
       pc.onconnectionstatechange = () => {
         const state = pc.connectionState;
+        console.log(`🔗 Connection state changed for ${userId}:`, state);
         
         if (this.onConnectionStateChange) {
           this.onConnectionStateChange(userId, state);
         }
         
         if (state === 'failed') {
+          console.warn(`⚠️ Connection failed for ${userId}, attempting ICE restart...`);
           setTimeout(() => {
             if (pc.connectionState === 'failed') {
               this.restartIce(userId);
             }
           }, 2000);
+        } else if (state === 'connected') {
+          console.log(`✅ Connection established for ${userId}`);
         }
       };
 
       // Theo dõi ICE connection state
       pc.oniceconnectionstatechange = () => {
         const state = pc.iceConnectionState;
+        console.log(`🧊 ICE connection state changed for ${userId}:`, state);
         
         if (this.onIceConnectionStateChange) {
           this.onIceConnectionStateChange(userId, state);
+        }
+        
+        if (state === 'connected') {
+          console.log(`✅ ICE connected for ${userId}`);
+        } else if (state === 'failed') {
+          console.warn(`⚠️ ICE failed for ${userId}`);
         }
       };
 

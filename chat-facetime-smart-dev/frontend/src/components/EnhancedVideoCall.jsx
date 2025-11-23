@@ -249,15 +249,22 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       }
 
       // Subscribe to signaling
+      console.log('📡 Subscribing to signaling for room:', roomId);
       await socketService.subscribeToSignaling(roomId, handleSignalingMessage);
+      console.log('✅ Subscribed to signaling');
 
       // Subscribe to presence để nhận danh sách users hiện có
+      console.log('📡 Subscribing to presence for room:', roomId);
       await socketService.subscribeToPresence(roomId, handlePresenceMessage);
+      console.log('✅ Subscribed to presence');
 
       // Join room
+      console.log('👤 Joining room with signaling:', roomId);
       await socketService.joinRoomWithSignaling(roomId, currentUser);
+      console.log('✅ Joined room with signaling');
 
       setConnectionStatus('connected');
+      console.log('✅ Signaling initialized successfully');
 
     } catch (error) {
       console.error('❌ Signaling initialization error:', error);
@@ -286,6 +293,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
       const currentUserId = currentUser?.id || currentUser?.username;
       
+      if (!currentUserId) {
+        console.error('❌ Cannot send signal - currentUser is invalid');
+        return false;
+      }
+      
       const signalData = {
         type: signal.type,
         targetUserId: signal.targetUserId,
@@ -299,7 +311,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         timestamp: Date.now()
       };
 
+      // 🔥 DEBUG: Log signal gửi đi
+      console.log('📤 Sending signal:', signal.type, 'to:', signal.targetUserId, signalData);
+      
       await socketService.sendSignal(roomId, signalData);
+      console.log('✅ Signal sent successfully:', signal.type);
       return true;
 
     } catch (error) {
@@ -349,8 +365,12 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         return;
       }
 
+      // 🔥 DEBUG: Log signal type
+      console.log('📨 Received signal type:', data.type, 'from:', senderId);
+      
       switch (data.type) {
         case 'join':
+          console.log('👤 Join signal from:', senderId);
           await handleUserJoin(data.user || { id: senderId, username: data.username });
           break;
           
@@ -367,6 +387,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           break;
           
         case 'leave':
+          console.log('👋 Leave signal from:', senderId);
           handleUserLeave(data.user || { id: senderId, username: data.username });
           break;
       }
@@ -415,6 +436,7 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
       // Tạo offer cho TẤT CẢ users hiện có trong room (chỉ khi đã có localStream)
       if (localStream && webrtcService.localStream) {
+        console.log('📤 Creating offers for', otherUsers.length, 'users');
         for (const user of otherUsers) {
           const userId = user.id || user.userId || user.username;
           if (!userId) continue;
@@ -422,20 +444,32 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
           try {
             // Kiểm tra xem đã có peer connection chưa
             if (!webrtcService.hasPeerConnection(userId)) {
+              console.log('📤 Creating offer for:', userId);
               const offer = await webrtcService.createOffer(userId);
               
               if (offer) {
+                console.log('✅ Offer created, sending to:', userId);
                 await sendSignalSafely({
                   type: 'offer',
                   offer: offer,
                   targetUserId: userId
                 });
+                console.log('✅ Offer sent to:', userId);
+              } else {
+                console.warn('⚠️ No offer created for:', userId);
               }
+            } else {
+              console.log('ℹ️ Peer connection already exists for:', userId);
             }
           } catch (error) {
             console.error(`❌ Error creating offer for ${userId}:`, error);
           }
         }
+      } else {
+        console.warn('⚠️ Cannot create offers - localStream missing:', {
+          localStream: !!localStream,
+          webrtcLocalStream: !!webrtcService.localStream
+        });
       }
     } catch (error) {
       console.error('❌ Error handling presence message:', error);
@@ -474,15 +508,22 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
     try {
       if (!webrtcService.hasPeerConnection(userId)) {
+        console.log('📤 User joined, creating offer for:', userId);
         const offer = await webrtcService.createOffer(userId);
         
         if (offer) {
+          console.log('✅ Offer created for new user:', userId);
           await sendSignalSafely({
             type: 'offer',
             offer: offer,
             targetUserId: userId
           });
+          console.log('✅ Offer sent to new user:', userId);
+        } else {
+          console.warn('⚠️ No offer created for new user:', userId);
         }
+      } else {
+        console.log('ℹ️ Peer connection already exists for new user:', userId);
       }
       
     } catch (error) {
@@ -500,15 +541,22 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       return;
     }
 
+    // 🔥 DEBUG: Log để kiểm tra
+    console.log('📥 Received OFFER from:', userId, data);
+
     try {
       const answer = await webrtcService.handleOffer(userId, data.offer);
       
       if (answer) {
+        console.log('✅ Created ANSWER for:', userId);
         await sendSignalSafely({
           type: 'answer', 
           answer: answer,
           targetUserId: userId
         });
+        console.log('✅ Sent ANSWER to:', userId);
+      } else {
+        console.warn('⚠️ No answer created for:', userId);
       }
       
     } catch (error) {
@@ -529,8 +577,12 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       return;
     }
     
+    // 🔥 DEBUG: Log để kiểm tra
+    console.log('📥 Received ANSWER from:', userId, data);
+    
     try {
       await webrtcService.handleAnswer(userId, data.answer);
+      console.log('✅ Processed ANSWER from:', userId);
     } catch (error) {
       // Chỉ log lỗi thực sự, bỏ qua InvalidStateError khi state là stable
       if (error.name !== 'InvalidStateError' || error.message?.includes('stable')) {
@@ -553,6 +605,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     const currentUserId = currentUser?.id || currentUser?.username;
     if (userId === currentUserId) {
       return;
+    }
+    
+    // 🔥 DEBUG: Chỉ log mỗi 10 candidates để không spam
+    if (Math.random() < 0.1) {
+      console.log('📥 Received ICE candidate from:', userId);
     }
     
     try {
