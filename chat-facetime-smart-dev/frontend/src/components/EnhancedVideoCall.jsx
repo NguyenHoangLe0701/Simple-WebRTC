@@ -265,9 +265,13 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       
       // Thử kết nối lại sau 3s
       setTimeout(() => {
-        if (isActive && connectionStatus !== 'connected') {
-          initializeSignaling();
-        }
+        // 🔥 FIX: Check lại connectionStatus từ state mới nhất
+        setConnectionStatus(currentStatus => {
+          if (isActive && currentStatus !== 'connected') {
+            initializeSignaling();
+          }
+          return currentStatus;
+        });
       }, 3000);
     }
   };
@@ -446,14 +450,21 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
     const currentUserId = currentUser?.id || currentUser?.username;
     if (userId === currentUserId) return;
 
-    // Thêm vào participants
+    // Thêm vào participants - đảm bảo không trùng lặp
     setParticipants(prev => {
       const exists = prev.find(p => {
         const pid = p.id || p.userId || p.username;
         return pid === userId;
       });
       if (exists) return prev;
-      return [...prev, user];
+      // 🔥 FIX: Đảm bảo user object có đầy đủ thông tin
+      return [...prev, {
+        id: userId,
+        userId: userId,
+        username: user.username || user.userId || userId,
+        fullName: user.fullName || user.username || userId,
+        ...user
+      }];
     });
 
     // Tạo offer cho user mới (chỉ nếu chưa có peer connection và đã có localStream)
@@ -556,10 +567,19 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
 
   // 🆕 FIX: Xử lý user leave
   const handleUserLeave = (user) => {
-    const userId = user.id;
+    // 🔥 FIX: Thêm fallback như các hàm khác
+    const userId = user?.id || user?.userId || user?.username;
+    
+    if (!userId) {
+      console.warn('⚠️ User leave missing userId:', user);
+      return;
+    }
 
-    // Xóa khỏi participants
-    setParticipants(prev => prev.filter(p => p.id !== userId));
+    // Xóa khỏi participants - sử dụng fallback để match
+    setParticipants(prev => prev.filter(p => {
+      const pid = p.id || p.userId || p.username;
+      return pid !== userId;
+    }));
     
     // Đóng peer connection
     webrtcService.closePeerConnection(userId);
