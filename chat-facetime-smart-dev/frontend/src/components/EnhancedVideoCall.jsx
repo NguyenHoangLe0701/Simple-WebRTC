@@ -95,12 +95,18 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         if (candidates.length > 0) {
           // Gửi candidate mới nhất (thường là quan trọng nhất)
           const latestCandidate = candidates[candidates.length - 1];
-          sendSignalSafely({
-            type: 'ice-candidate',
-            candidate: latestCandidate,
-            targetUserId: userId,
-            // 🔥 QUAN TRỌNG: fromUserId sẽ được thêm bởi sendSignal()
-          });
+          
+          // 🔥 FIX: Validate candidate trước khi gửi
+          if (latestCandidate && latestCandidate.candidate) {
+            sendSignalSafely({
+              type: 'ice-candidate',
+              candidate: latestCandidate,
+              targetUserId: userId,
+              // 🔥 QUAN TRỌNG: fromUserId sẽ được thêm bởi sendSignal()
+            });
+          } else {
+            console.warn('⚠️ Invalid ICE candidate, skipping:', latestCandidate);
+          }
           iceCandidateQueue.current.set(userId, []);
         }
         iceCandidateTimer.current.delete(userId);
@@ -298,11 +304,11 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         return false;
       }
       
+      // 🔥 FIX: Xử lý đúng cách cho từng loại signal
       const signalData = {
         type: signal.type,
         targetUserId: signal.targetUserId,
         fromUserId: currentUserId, // 🔥 QUAN TRỌNG: Thêm fromUserId cho mọi signal
-        [signal.type]: signal[signal.type], // offer, answer, candidate
         user: {
           id: currentUserId,
           username: currentUser?.username,
@@ -310,6 +316,15 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
         },
         timestamp: Date.now()
       };
+      
+      // 🔥 FIX: Thêm data đúng cách cho từng loại signal
+      if (signal.type === 'offer') {
+        signalData.offer = signal.offer;
+      } else if (signal.type === 'answer') {
+        signalData.answer = signal.answer;
+      } else if (signal.type === 'ice-candidate') {
+        signalData.candidate = signal.candidate; // 🔥 QUAN TRỌNG: dùng 'candidate' không phải 'ice-candidate'
+      }
 
       // 🔥 DEBUG: Log signal gửi đi
       console.log('📤 Sending signal:', signal.type, 'to:', signal.targetUserId, signalData);
@@ -607,13 +622,24 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       return;
     }
     
+    // 🔥 FIX: Validate candidate trước khi xử lý
+    const candidate = data.candidate;
+    if (!candidate) {
+      console.warn('⚠️ ICE candidate data missing candidate:', data);
+      return;
+    }
+    
     // 🔥 DEBUG: Chỉ log mỗi 10 candidates để không spam
     if (Math.random() < 0.1) {
-      console.log('📥 Received ICE candidate from:', userId);
+      console.log('📥 Received ICE candidate from:', userId, {
+        candidate: candidate.candidate?.substring(0, 50) + '...',
+        sdpMLineIndex: candidate.sdpMLineIndex,
+        sdpMid: candidate.sdpMid
+      });
     }
     
     try {
-      await webrtcService.handleIceCandidate(userId, data.candidate);
+      await webrtcService.handleIceCandidate(userId, candidate);
     } catch (error) {
       // Bỏ qua lỗi thông thường của ICE candidate
       if (error.name !== 'OperationError' && error.name !== 'InvalidStateError') {

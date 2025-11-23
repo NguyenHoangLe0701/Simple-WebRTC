@@ -268,21 +268,34 @@ class WebRTCService {
       const pc = this.peerConnections.get(userId);
       if (!pc) {
         // Nếu không có peer connection, có thể answer đến quá sớm, bỏ qua
+        console.warn('⚠️ No peer connection for answer from:', userId);
         return;
       }
 
-      // Kiểm tra state trước khi set remote description
-      if (pc.signalingState === 'stable') {
+      // 🔥 FIX: Kiểm tra state chi tiết hơn
+      const currentState = pc.signalingState;
+      console.log(`🔍 Current signaling state for ${userId}:`, currentState);
+      
+      if (currentState === 'stable') {
         // Đã ở trạng thái stable, answer này có thể đã được xử lý hoặc đến muộn
+        console.warn('⚠️ Answer received in stable state for:', userId, '- ignoring');
         return;
       }
       
-      if (pc.signalingState !== 'have-local-offer') {
+      if (currentState !== 'have-local-offer') {
         // Không ở trạng thái đúng, bỏ qua
+        console.warn('⚠️ Answer received in wrong state for:', userId, '- state:', currentState);
+        return;
+      }
+
+      // 🔥 FIX: Validate answer trước khi set
+      if (!answer || !answer.type || answer.type !== 'answer') {
+        console.error('❌ Invalid answer format for:', userId, answer);
         return;
       }
 
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      console.log('✅ Successfully set remote answer for:', userId);
     } catch (error) {
       // 🔥 QUAN TRỌNG: Xử lý các lỗi SDP negotiation
       if (error.name === 'InvalidAccessError') {
@@ -305,19 +318,64 @@ class WebRTCService {
         return;
       }
       
-      // Nếu lỗi là InvalidStateError và state là stable, bỏ qua (đã được xử lý)
-      if (error.name === 'InvalidStateError' && pc?.signalingState === 'stable') {
-        return;
+      // 🔥 FIX: Xử lý InvalidStateError tốt hơn
+      if (error.name === 'InvalidStateError') {
+        const currentState = pc?.signalingState;
+        console.warn(`⚠️ InvalidStateError when handling answer for ${userId} - current state:`, currentState);
+        
+        // Nếu đã ở stable, bỏ qua (có thể đã được xử lý)
+        if (currentState === 'stable' || currentState === 'have-remote-answer') {
+          console.log('ℹ️ Answer already processed, ignoring');
+          return;
+        }
+        
+        // Nếu ở trạng thái khác, có thể cần reset
+        if (currentState === 'have-local-answer') {
+          console.warn('⚠️ Duplicate answer detected, closing connection');
+          this.closePeerConnection(userId);
+          return;
+        }
       }
+      
       console.error('❌ Error handling answer from', userId + ':', error);
-      throw error;
+      // Không throw error để tránh crash, chỉ log
     }
   }
 
   async handleIceCandidate(userId, candidate) {
     try {
       const pc = this.peerConnections.get(userId);
-      if (!pc || !candidate) {
+      if (!pc) {
+        console.warn('⚠️ No peer connection for ICE candidate from:', userId);
+        return;
+      }
+      
+      if (!candidate) {
+        console.warn('⚠️ Empty ICE candidate from:', userId);
+        return;
+      }
+      
+      // 🔥 FIX: Validate candidate format
+      if (typeof candidate === 'string') {
+        // Nếu là string, parse thành object
+        try {
+          candidate = JSON.parse(candidate);
+        } catch (e) {
+          console.warn('⚠️ Invalid ICE candidate format (string):', candidate);
+          return;
+        }
+      }
+      
+      // 🔥 FIX: Kiểm tra candidate có đầy đủ thông tin không
+      if (!candidate.candidate && !candidate.sdpMLineIndex && !candidate.sdpMid) {
+        console.warn('⚠️ Invalid ICE candidate structure:', candidate);
+        return;
+      }
+      
+      // 🔥 FIX: Chỉ add candidate khi ở trạng thái hợp lệ
+      const validStates = ['stable', 'have-local-offer', 'have-remote-offer', 'have-local-answer', 'have-remote-answer'];
+      if (!validStates.includes(pc.signalingState)) {
+        console.warn('⚠️ Cannot add ICE candidate - invalid signaling state:', pc.signalingState);
         return;
       }
       
@@ -325,9 +383,16 @@ class WebRTCService {
       
     } catch (error) {
       // Bỏ qua lỗi nếu candidate đã được thêm hoặc connection đã đóng
-      if (error.name !== 'OperationError' && error.name !== 'InvalidStateError') {
-        console.error('❌ Error adding ICE candidate for', userId + ':', error);
+      if (error.name === 'OperationError') {
+        // Candidate đã được thêm, bỏ qua
+        return;
       }
+      if (error.name === 'InvalidStateError') {
+        // Connection đã đóng hoặc state không hợp lệ
+        console.warn('⚠️ Invalid state when adding ICE candidate for', userId);
+        return;
+      }
+      console.error('❌ Error adding ICE candidate for', userId + ':', error);
     }
   }
 
