@@ -24,8 +24,9 @@ public class ChatController {
     @MessageMapping("/chat/{roomId}")
     public void sendMessage(@DestinationVariable String roomId, @Payload Map<String, Object> payload) {
         try {
-            System.out.println("💬 Chat Message - Room: " + roomId);
-            System.out.println("📦 Payload keys: " + payload.keySet());
+            // 🔇 GIẢM LOG - chat messages quá nhiều
+            // System.out.println("💬 Chat Message - Room: " + roomId);
+            // System.out.println("📦 Payload keys: " + payload.keySet());
             
             ChatMessage message = new ChatMessage();
             
@@ -55,7 +56,8 @@ public class ChatController {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> replyToMap = (Map<String, Object>) payload.get("replyTo");
                 message.setReplyTo(replyToMap);
-                System.out.println("📎 ReplyTo set: " + replyToMap);
+                // 🔇 GIẢM LOG
+                // System.out.println("📎 ReplyTo set: " + replyToMap);
             }
             
             if (message.getContent() == null || message.getContent().trim().isEmpty()) {
@@ -70,13 +72,15 @@ public class ChatController {
                 message.setSenderId(message.getSender());
             }
             
-            System.out.println("📨 Sending: " + message.getSender() + " - " + 
-                (message.getContent().length() > 30 ? 
-                 message.getContent().substring(0, 30) + "..." : message.getContent()));
-            System.out.println("📎 ReplyTo in message: " + (message.getReplyTo() != null ? message.getReplyTo().toString() : "null"));
+            // 🔇 GIẢM LOG - chat messages quá nhiều
+            // System.out.println("📨 Sending: " + message.getSender() + " - " + 
+            //     (message.getContent().length() > 30 ? 
+            //      message.getContent().substring(0, 30) + "..." : message.getContent()));
+            // System.out.println("📎 ReplyTo in message: " + (message.getReplyTo() != null ? message.getReplyTo().toString() : "null"));
             
             messagingTemplate.convertAndSend("/topic/chat/" + roomId, message);
-            System.out.println("✅ Broadcast to room: " + roomId + " (with replyTo: " + (message.getReplyTo() != null ? "YES" : "NO") + ")");
+            // 🔇 GIẢM LOG
+            // System.out.println("✅ Broadcast to room: " + roomId + " (with replyTo: " + (message.getReplyTo() != null ? "YES" : "NO") + ")");
             
         } catch (Exception e) {
             System.err.println("❌ Chat Error: " + e.getMessage());
@@ -88,7 +92,8 @@ public class ChatController {
     public void deleteMessage(@DestinationVariable String roomId, @Payload Map<String, String> payload) {
         try {
             String messageId = payload.get("id");
-            System.out.println("🗑️ Deleting message: " + messageId + " in room " + roomId);
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("🗑️ Deleting message: " + messageId + " in room " + roomId);
 
             if (messageId == null || messageId.trim().isEmpty()) {
                 System.err.println("❌ Delete request: messageId is null or empty");
@@ -101,11 +106,13 @@ public class ChatController {
             deleteNotification.setRoomId(roomId);
             deleteNotification.setType(ChatMessage.MessageType.DELETE);
             
-            System.out.println("📤 Broadcasting DELETE message - ID: " + messageId + ", Type: " + deleteNotification.getType() + ", Room: " + roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("📤 Broadcasting DELETE message - ID: " + messageId + ", Type: " + deleteNotification.getType() + ", Room: " + roomId);
             
             // Gửi cho tất cả mọi người trong phòng (kể cả người gửi lệnh)
             messagingTemplate.convertAndSend("/topic/chat/" + roomId, deleteNotification);
-            System.out.println("✅ Delete notification broadcasted to all users in room: " + roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("✅ Delete notification broadcasted to all users in room: " + roomId);
         } catch (Exception e) {
             System.err.println("❌ Error deleting message: " + e.getMessage());
             e.printStackTrace();
@@ -116,7 +123,8 @@ public class ChatController {
         try {
             String messageId = payload.get("id");
             String newContent = payload.get("content");
-            System.out.println("✏️ Editing message: " + messageId + " in room " + roomId);
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("✏️ Editing message: " + messageId + " in room " + roomId);
 
             if (messageId == null || messageId.trim().isEmpty()) {
                 System.err.println("❌ Edit request: messageId is null or empty");
@@ -135,11 +143,13 @@ public class ChatController {
             editNotification.setContent(newContent.trim()); // Nội dung mới (trim để loại bỏ khoảng trắng thừa)
             editNotification.setType(ChatMessage.MessageType.EDIT);
             
-            System.out.println("📤 Broadcasting EDIT message - ID: " + messageId + ", Type: " + editNotification.getType() + ", Content: " + newContent.substring(0, Math.min(50, newContent.length())) + "...");
+            // 🔇 GIẢM LOG
+            // System.out.println("📤 Broadcasting EDIT message - ID: " + messageId + ", Type: " + editNotification.getType() + ", Content: " + newContent.substring(0, Math.min(50, newContent.length())) + "...");
             
             // Gửi cho tất cả mọi người trong phòng (kể cả người gửi lệnh)
             messagingTemplate.convertAndSend("/topic/chat/" + roomId, editNotification);
-            System.out.println("✅ Edit notification broadcasted to all users in room: " + roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("✅ Edit notification broadcasted to all users in room: " + roomId);
         } catch (Exception e) {
             System.err.println("❌ Error editing message: " + e.getMessage());
             e.printStackTrace();
@@ -152,7 +162,8 @@ public class ChatController {
         try {
             String messageId = payload.get("id");
             String emoji = payload.get("emoji");
-            System.out.println("😀 Adding reaction: " + emoji + " to message " + messageId + " in room " + roomId);
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("😀 Adding reaction: " + emoji + " to message " + messageId + " in room " + roomId);
 
             if (messageId == null || messageId.trim().isEmpty()) {
                 System.err.println("❌ Reaction request: messageId is null or empty");
@@ -177,11 +188,13 @@ public class ChatController {
             // Thêm emoji vào message để frontend biết emoji nào được thêm
             reactionNotification.setContent(emoji); // Dùng content để chứa emoji tạm thời
             
-            System.out.println("📤 Broadcasting REACTION message - MessageID: " + messageId + ", Type: " + reactionNotification.getType() + ", Emoji: " + emoji + ", Room: " + roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("📤 Broadcasting REACTION message - MessageID: " + messageId + ", Type: " + reactionNotification.getType() + ", Emoji: " + emoji + ", Room: " + roomId);
             
             // Gửi cho tất cả mọi người trong phòng (kể cả người gửi lệnh)
             messagingTemplate.convertAndSend("/topic/chat/" + roomId, reactionNotification);
-            System.out.println("✅ Reaction notification broadcasted to all users in room: " + roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("✅ Reaction notification broadcasted to all users in room: " + roomId);
         } catch (Exception e) {
             System.err.println("❌ Error adding reaction: " + e.getMessage());
             e.printStackTrace();

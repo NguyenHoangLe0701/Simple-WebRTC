@@ -22,6 +22,15 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Xác định loại call (video hoặc voice)
   const isVideoCall = callType === 'video';
 
+  // 🆕 FIX: Kiểm tra currentUser có hợp lệ không
+  useEffect(() => {
+    if (isActive && (!currentUser || (!currentUser.id && !currentUser.username))) {
+      console.error('❌ Video call requires valid currentUser');
+      alert('Lỗi: Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.');
+      onEndCall();
+    }
+  }, [isActive, currentUser, onEndCall]);
+
   // 🆕 FIX: Throttling cho ICE candidates để tránh gửi quá nhiều
   const iceCandidateQueue = useRef(new Map()); // Map<userId, candidate[]>
   const iceCandidateTimer = useRef(new Map()); // Map<userId, timer>
@@ -221,6 +230,13 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   // 🆕 FIX: Hàm khởi tạo signaling với presence support
   const initializeSignaling = async () => {
     if (!isActive || !roomId || !localStream) {
+      return;
+    }
+
+    // Kiểm tra currentUser trước khi join
+    if (!currentUser || (!currentUser.id && !currentUser.username)) {
+      console.error('❌ Cannot initialize signaling: currentUser is invalid');
+      setConnectionStatus('error');
       return;
     }
 

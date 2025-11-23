@@ -33,10 +33,11 @@ public class DataInitializer implements CommandLineRunner {
             adminUser.setRole(User.Role.ADMIN);
             adminUser.setActive(true);
             adminUser.setCreatedAt(LocalDateTime.now());
-            System.out.println("✅ Admin user created: username=admin, password=12345");
+            // 🔇 GIẢM LOG - chỉ log khi start app
+            // System.out.println("✅ Admin user created: username=admin, password=12345");
         } else {
             // Cập nhật admin user hiện tại
-            System.out.println("ℹ️ Admin user already exists, updating password and ensuring active status...");
+            // System.out.println("ℹ️ Admin user already exists, updating password and ensuring active status...");
         }
         
         // Luôn cập nhật password và đảm bảo admin user được enable
@@ -45,6 +46,7 @@ public class DataInitializer implements CommandLineRunner {
         adminUser.setRole(User.Role.ADMIN); // Đảm bảo role là ADMIN
         adminUser.setUpdatedAt(LocalDateTime.now());
         userRepository.save(adminUser);
-        System.out.println("✅ Admin user updated: active=true, role=ADMIN");
+        // 🔇 GIẢM LOG - chỉ log khi start app
+        // System.out.println("✅ Admin user updated: active=true, role=ADMIN");
     }
 }

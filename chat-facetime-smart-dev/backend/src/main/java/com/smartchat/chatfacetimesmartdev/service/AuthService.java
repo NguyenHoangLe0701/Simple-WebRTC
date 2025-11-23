@@ -82,36 +82,40 @@ public class AuthService {
     }
     
     public AuthResponseDto login(LoginDto loginDto, String ipAddress, String userAgent, String deviceInfo) {
-        System.out.println("Login attempt for: " + loginDto.getUsernameOrEmail());
+        // 🔇 GIẢM LOG - chỉ log lỗi
+        // System.out.println("Login attempt for: " + loginDto.getUsernameOrEmail());
         
         // Tìm user theo username trước
         Optional<User> userOpt = userRepository.findByUsername(loginDto.getUsernameOrEmail());
-        System.out.println("Found by username: " + userOpt.isPresent());
+        // System.out.println("Found by username: " + userOpt.isPresent());
         
         // Nếu không có username thì thử tìm theo email
         if (userOpt.isEmpty()) {
             userOpt = userRepository.findByEmail(loginDto.getUsernameOrEmail());
-            System.out.println("Found by email: " + userOpt.isPresent());
+            // System.out.println("Found by email: " + userOpt.isPresent());
         }
         
         if (userOpt.isEmpty()) {
-            System.out.println("User not found: " + loginDto.getUsernameOrEmail());
+            // Chỉ log khi user không tìm thấy (có thể là lỗi)
+            System.err.println("⚠️ Login failed - User not found: " + loginDto.getUsernameOrEmail());
             throw new RuntimeException("Tài khoản không tồn tại");
         }
         
         User user = userOpt.get();
-        System.out.println("User found: " + user.getUsername() + ", role: " + user.getRole());
+        // 🔇 GIẢM LOG
+        // System.out.println("User found: " + user.getUsername() + ", role: " + user.getRole());
         
         // Xác thực mật khẩu
         boolean passwordMatch = passwordEncoder.matches(loginDto.getPassword(), user.getPassword());
-        System.out.println("Password match: " + passwordMatch);
+        // System.out.println("Password match: " + passwordMatch);
         
         if (!passwordMatch) {
+            System.err.println("⚠️ Login failed - Invalid password for: " + loginDto.getUsernameOrEmail());
             throw new RuntimeException("Mật khẩu không đúng");
         }
         
         // Không cần thay đổi role, chỉ kiểm tra role hiện tại
-        System.out.println("User role: " + user.getRole());
+        // System.out.println("User role: " + user.getRole());
         
         // Cập nhật last login
         user.setLastLogin(LocalDateTime.now());
@@ -128,9 +132,10 @@ public class AuthService {
                     deviceInfo != null ? deviceInfo : "Unknown"
                 );
                 sessionId = session.getSessionId();
-                System.out.println("Login session created: " + sessionId);
+                // 🔇 GIẢM LOG
+                // System.out.println("Login session created: " + sessionId);
             } catch (Exception e) {
-                System.err.println("Error creating login session: " + e.getMessage());
+                System.err.println("❌ Error creating login session: " + e.getMessage());
                 // Nếu không tạo được session, vẫn cho phép login
             }
         }

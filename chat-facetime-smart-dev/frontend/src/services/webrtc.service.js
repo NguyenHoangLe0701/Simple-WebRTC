@@ -61,13 +61,28 @@ class WebRTCService {
     try {
       const pc = new RTCPeerConnection(this.config);
 
-      // Thêm local stream tracks nếu có
+      // 🔥 QUAN TRỌNG: Thêm tracks theo thứ tự nhất quán (audio trước, video sau)
+      // Điều này đảm bảo thứ tự m-lines trong SDP luôn giống nhau
       if (this.localStream) {
-        this.localStream.getTracks().forEach(track => {
+        // Lấy tất cả tracks
+        const audioTracks = this.localStream.getAudioTracks();
+        const videoTracks = this.localStream.getVideoTracks();
+        
+        // Add audio tracks trước
+        audioTracks.forEach(track => {
           try {
             pc.addTrack(track, this.localStream);
           } catch (error) {
-            console.error('❌ Error adding track:', error);
+            console.error('❌ Error adding audio track:', error);
+          }
+        });
+        
+        // Add video tracks sau
+        videoTracks.forEach(track => {
+          try {
+            pc.addTrack(track, this.localStream);
+          } catch (error) {
+            console.error('❌ Error adding video track:', error);
           }
         });
       }
@@ -132,17 +147,10 @@ class WebRTCService {
     try {
       const pc = this.createPeerConnection(userId);
       
-      // Chỉ yêu cầu video nếu localStream có video track
-      const hasVideo = this.localStream && this.localStream.getVideoTracks().length > 0;
-      
-      const offerOptions = {
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: hasVideo,
-        voiceActivityDetection: false,
-        iceRestart: false
-      };
-
-      const offer = await pc.createOffer(offerOptions);
+      // 🔥 QUAN TRỌNG: Không dùng offerOptions với offerToReceiveAudio/Video
+      // Để browser tự động tạo SDP dựa trên tracks đã add
+      // Điều này đảm bảo m-lines được tạo đúng thứ tự
+      const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       
       // Chờ ICE gathering hoàn tất
@@ -201,23 +209,38 @@ class WebRTCService {
       
       // Chỉ set remote description nếu đang ở trạng thái stable (chưa có offer nào)
       if (pc.signalingState === 'stable') {
-        await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(offer));
+        } catch (setError) {
+          // Nếu lỗi khi set remote description, đóng và tạo lại
+          if (setError.name === 'InvalidAccessError' || setError.name === 'InvalidStateError') {
+            console.warn('⚠️ Error setting remote description - recreating connection');
+            this.closePeerConnection(userId);
+            return null;
+          }
+          throw setError;
+        }
       } else {
         // Nếu không ở stable, bỏ qua offer này (có thể đã được xử lý)
         return null;
       }
       
-      const answer = await pc.createAnswer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: this.localStream && this.localStream.getVideoTracks().length > 0
-      });
-      
+      // 🔥 QUAN TRỌNG: Không dùng options khi tạo answer
+      // Browser sẽ tự động match m-lines với offer
+      // Điều này đảm bảo thứ tự m-lines khớp với offer
+      const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       return pc.localDescription;
       
     } catch (error) {
       // Nếu lỗi là InvalidStateError, có thể do race condition, bỏ qua
       if (error.name === 'InvalidStateError') {
+        return null;
+      }
+      // Nếu lỗi InvalidAccessError (m-lines mismatch), đóng connection
+      if (error.name === 'InvalidAccessError') {
+        console.warn('⚠️ SDP m-lines mismatch when handling offer - closing connection');
+        this.closePeerConnection(userId);
         return null;
       }
       console.error('❌ Error handling offer from', userId + ':', error);
@@ -246,6 +269,27 @@ class WebRTCService {
 
       await pc.setRemoteDescription(new RTCSessionDescription(answer));
     } catch (error) {
+      // 🔥 QUAN TRỌNG: Xử lý các lỗi SDP negotiation
+      if (error.name === 'InvalidAccessError') {
+        // Lỗi m-lines không khớp - đóng và tạo lại peer connection
+        console.warn('⚠️ SDP m-lines mismatch for', userId, '- recreating connection');
+        this.closePeerConnection(userId);
+        
+        // Thử tạo lại offer sau 500ms
+        setTimeout(async () => {
+          try {
+            const newOffer = await this.createOffer(userId);
+            if (this.onIceCandidate) {
+              // Gửi lại offer nếu có callback
+              // Note: Component cần xử lý việc gửi offer
+            }
+          } catch (retryError) {
+            console.error('❌ Error recreating offer:', retryError);
+          }
+        }, 500);
+        return;
+      }
+      
       // Nếu lỗi là InvalidStateError và state là stable, bỏ qua (đã được xử lý)
       if (error.name === 'InvalidStateError' && pc?.signalingState === 'stable') {
         return;
@@ -367,40 +411,52 @@ class WebRTCService {
 
   // Phương thức debug
   logConnectionStats() {
-    console.log('📊 WebRTC Connection Stats:', {
-      peerConnections: this.peerConnections.size,
-      remoteStreams: this.remoteStreams.size,
-      localStream: this.localStream ? 
-        this.localStream.getTracks().map(t => t.kind) : 'none',
-      roomId: this.roomId
-    });
-
-    this.peerConnections.forEach((pc, userId) => {
-      console.log(`👤 ${userId}:`, {
-        connectionState: pc.connectionState,
-        iceConnectionState: pc.iceConnectionState,
-        signalingState: pc.signalingState,
-        iceGatheringState: pc.iceGatheringState
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📊 WebRTC Connection Stats:', {
+        peerConnections: this.peerConnections.size,
+        remoteStreams: this.remoteStreams.size,
+        localStream: this.localStream ? 
+          this.localStream.getTracks().map(t => t.kind) : 'none',
+        roomId: this.roomId
       });
-    });
+
+      this.peerConnections.forEach((pc, userId) => {
+        console.log(`👤 ${userId}:`, {
+          connectionState: pc.connectionState,
+          iceConnectionState: pc.iceConnectionState,
+          signalingState: pc.signalingState,
+          iceGatheringState: pc.iceGatheringState
+        });
+      });
+    }
   }
 
   // Kiểm tra TURN server hoạt động
   checkTurnServerStatus() {
-    console.log('🔍 Checking TURN server configuration...');
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Checking TURN server configuration...');
+    }
     const testPc = new RTCPeerConnection(this.config);
     let relayCandidateFound = false;
 
     testPc.onicecandidate = (e) => {
       if (e.candidate) {
-        console.log('ICE Candidate:', e.candidate.candidate);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('ICE Candidate:', e.candidate.candidate);
+        }
         if (e.candidate.candidate.includes('relay')) {
           relayCandidateFound = true;
-          console.log('✅ TURN SERVER WORKING - Relay candidate found!');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('✅ TURN SERVER WORKING - Relay candidate found!');
+          }
         }
       } else {
-        console.log('ICE gathering complete');
-        console.log('Relay candidate found:', relayCandidateFound);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('ICE gathering complete');
+          console.log('Relay candidate found:', relayCandidateFound);
+        }
         testPc.close();
       }
     };

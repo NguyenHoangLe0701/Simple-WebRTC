@@ -62,7 +62,10 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
 
     // KHI CÓ STREAM TỪ NGƯỜI KHÁC: Cập nhật state để React render
     WebRTCService.setOnRemoteStream((userId, stream) => {
-      console.log('Component: Nhận remote stream từ', userId);
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Component: Nhận remote stream từ', userId);
+      }
       setRemoteStreams(prev => new Map(prev).set(userId, stream));
     });
 
@@ -85,7 +88,10 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
 
     // (Tùy chọn) Theo dõi trạng thái kết nối
     WebRTCService.setOnConnectionStateChange((userId, state) => {
-      console.log('Component: Trạng thái kết nối với', userId, ':', state);
+      // Chỉ log trong development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Component: Trạng thái kết nối với', userId, ':', state);
+      }
       if (state === 'failed' || state === 'disconnected' || state === 'closed') {
         // Xóa stream của người đó nếu kết nối hỏng
         setRemoteStreams(prev => {
@@ -158,7 +164,10 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
         // Lọc ra những người khác, không bao gồm bản thân
         const otherUsers = data.users.filter(u => u.id !== currentUser.id);
         setParticipants(otherUsers);
-        console.log('Cập nhật presence, có', otherUsers.length, 'người khác');
+        // Chỉ log trong development mode
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Cập nhật presence, có', otherUsers.length, 'người khác');
+        }
       }
     } catch (error) {
       console.error('Lỗi xử lý presence message:', error);
@@ -181,8 +190,11 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
       
       switch (data.type) {
         // MỘT NGƯỜI MỚI JOIN: Tôi (người cũ) sẽ tạo offer gửi cho họ
-        case 'join':
-          console.log('User mới join:', fromUserId, '-> Đang tạo offer...');
+        case 'join':
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('User mới join:', fromUserId, '-> Đang tạo offer...');
+          }
           // Dùng service tạo offer
           const offer = await WebRTCService.createOffer(fromUserId);
           // Gửi offer cho người mới
@@ -192,11 +204,14 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
             fromUserId: currentUser.id,
             targetUserId: fromUserId
           });
-          break;
+          break;
 
         // MỘT NGƯỜI RỜI PHÒNG:
-        case 'leave':
-          console.log('User rời phòng:', fromUserId);
+        case 'leave':
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('User rời phòng:', fromUserId);
+          }
           // Dùng service đóng kết nối
           WebRTCService.closePeerConnection(fromUserId);
           // Xóa stream của họ khỏi UI
@@ -205,11 +220,14 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
             newMap.delete(fromUserId);
             return newMap;
           });
-          break;
+          break;
         
         // NHẬN ĐƯỢC OFFER (từ người mới join):
-        case 'offer':
-          console.log('Nhận offer từ:', fromUserId);
+        case 'offer':
+          // Chỉ log trong development mode
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Nhận offer từ:', fromUserId);
+          }
           // Dùng service xử lý offer và tạo answer
           const answer = await WebRTCService.handleOffer(fromUserId, data.offer);
           // Gửi answer lại cho họ
@@ -282,7 +300,10 @@ const ProfessionalVideoCall = ({ roomId, currentUser, isHost, onEndCall }) => {
   };
 
   const cleanup = () => {
-    console.log('Đang dọn dẹp...');
+    // Chỉ log trong development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Đang dọn dẹp...');
+    }
    
     // 1. Dùng service để dọn dẹp mọi kết nối và stream
     WebRTCService.cleanup();

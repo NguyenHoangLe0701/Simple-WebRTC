@@ -51,7 +51,8 @@ public class RoomWebSocketController {
                 return;
             }
 
-            System.out.println("👤 User joining - Room: " + roomId + ", User: " + fullName + " (" + userId + ")");
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("👤 User joining - Room: " + roomId + ", User: " + fullName + " (" + userId + ")");
 
             // Check or create room
             try {
@@ -69,7 +70,8 @@ public class RoomWebSocketController {
                     createDto.setAllowScreenShare(true);
                     createDto.setAllowChat(true);
                     roomService.createRoom(createDto);
-                    System.out.println("🆕 Auto-created room: " + roomId);
+                    // 🔇 GIẢM LOG - chỉ log lỗi
+                    // System.out.println("🆕 Auto-created room: " + roomId);
                 } catch (Exception ex) {
                     System.err.println("❌ Error creating room: " + ex.getMessage());
                     return;
@@ -87,7 +89,8 @@ public class RoomWebSocketController {
             boolean needsApproval = roomInfo.isPrivate() && !roomInfo.getApprovedUsers().contains(userId);
 
             if (needsApproval) {
-                System.out.println("⏳ Waiting approval: " + userId);
+                // 🔇 GIẢM LOG - chỉ log lỗi
+                // System.out.println("⏳ Waiting approval: " + userId);
                 roomService.joinRoom(roomId, joinDto);
 
                 // Send waiting notification
@@ -133,7 +136,8 @@ public class RoomWebSocketController {
                 );
                 messagingTemplate.convertAndSend("/topic/room/" + roomId, joinNotification);
                 
-                System.out.println("✅ User joined: " + fullName);
+                // 🔇 GIẢM LOG - chỉ log lỗi
+                // System.out.println("✅ User joined: " + fullName);
             }
 
         } catch (Exception e) {
@@ -162,7 +166,8 @@ public class RoomWebSocketController {
             }
 
             roomService.approveUser(roomId, targetUserId);
-            System.out.println("✅ Approved user: " + targetUserId);
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("✅ Approved user: " + targetUserId);
 
             // Add to presence
             UserPresence userPresence = new UserPresence(targetUserId, username, fullName, "online", System.currentTimeMillis());
@@ -196,7 +201,8 @@ public class RoomWebSocketController {
                 return;
             }
 
-            System.out.println("👋 User leaving: " + userId);
+            // 🔇 GIẢM LOG - chỉ log lỗi
+            // System.out.println("👋 User leaving: " + userId);
 
             // Remove from presence
             presenceService.remove(roomId, userId);
@@ -234,7 +240,8 @@ public void handleUserTypingStart(
 
     if (userId == null) return;
 
-    System.out.println("💬 Typing start: " + userName + " in room " + roomId);
+    // 🔇 GIẢM LOG - typing events quá nhiều
+    // System.out.println("💬 Typing start: " + userName + " in room " + roomId);
 
     Map<String, Object> userMap = Map.of("id", userId, "name", userName);
     Map<String, Object> typingEvent = Map.of(
@@ -259,7 +266,8 @@ public void handleUserTypingStop(
 
     if (userId == null) return;
 
-    System.out.println("💬 Typing stop: " + userName + " in room " + roomId);
+    // 🔇 GIẢM LOG - typing events quá nhiều
+    // System.out.println("💬 Typing stop: " + userName + " in room " + roomId);
 
     Map<String, Object> userMap = Map.of("id", userId, "name", userName);
     Map<String, Object> typingEvent = Map.of(
@@ -298,7 +306,8 @@ public void handleUserTypingStop(
             );
 
             messagingTemplate.convertAndSend("/topic/presence/" + roomId, presence);
-            System.out.println("📊 Presence updated - Room: " + roomId + ", Users: " + users.size());
+            // 🔇 GIẢM LOG - presence updates quá nhiều
+            // System.out.println("📊 Presence updated - Room: " + roomId + ", Users: " + users.size());
             
         } catch (Exception e) {
             System.err.println("❌ Error broadcasting presence: " + e.getMessage());

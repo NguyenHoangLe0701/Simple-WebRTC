@@ -42,8 +42,9 @@ public class RoomService {
         roomParticipants.put(createDto.getRoomId(), new HashSet<>());
         waitingUsers.put(createDto.getRoomId(), new HashSet<>()); // 🆕 INIT WAITING USERS
         
-        System.out.println("✅ Room created: " + createDto.getRoomId());
-        debugRoomState(createDto.getRoomId());
+        // 🔇 GIẢM LOG - chỉ log lỗi
+        // System.out.println("✅ Room created: " + createDto.getRoomId());
+        // debugRoomState(createDto.getRoomId());
         
         return room; // 🆕 TRẢ VỀ ROOM ĐÃ TẠO
     }
@@ -72,8 +73,9 @@ public class RoomService {
             // THÊM VÀO DANH SÁCH CHỜ DUYỆT
             waitingUsers.get(roomId).add(userId);
             room.getWaitingUsers().add(userId);
-            System.out.println("⏳ User waiting for approval: " + userId + " -> " + roomId);
-            debugRoomState(roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("⏳ User waiting for approval: " + userId + " -> " + roomId);
+            // debugRoomState(roomId);
             return joinDto; // 🆕 TRẢ VỀ MÀ KHÔNG THÊM VÀO PARTICIPANTS
         }
         
@@ -82,9 +84,10 @@ public class RoomService {
         room.getParticipants().add(userId);
         room.setUpdatedAt(java.time.LocalDateTime.now());
         
-        System.out.println("✅ User joined room: " + userId + " -> " + roomId);
-        debugRoomParticipants(roomId);
-        debugRoomState(roomId);
+        // 🔇 GIẢM LOG
+        // System.out.println("✅ User joined room: " + userId + " -> " + roomId);
+        // debugRoomParticipants(roomId);
+        // debugRoomState(roomId);
         
         return joinDto;
     }
@@ -111,7 +114,8 @@ public class RoomService {
             room.getWaitingUsers().remove(userId);
         }
         
-        System.out.println("✅ User left room: " + userId + " <- " + roomId);
+        // 🔇 GIẢM LOG
+        // System.out.println("✅ User left room: " + userId + " <- " + roomId);
         
         // 🆕 NẾU ROOM TRỐNG, CÓ THỂ XÓA ROOM
         if (participants != null && participants.isEmpty() && 
@@ -119,11 +123,12 @@ public class RoomService {
             rooms.remove(roomId);
             roomParticipants.remove(roomId);
             waitingUsers.remove(roomId);
-            System.out.println("🗑️ Room removed (empty): " + roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("🗑️ Room removed (empty): " + roomId);
         }
         
-        debugRoomParticipants(roomId);
-        debugRoomState(roomId);
+        // debugRoomParticipants(roomId);
+        // debugRoomState(roomId);
     }
 
     public RoomDto getRoomInfo(String roomId) {
@@ -154,8 +159,9 @@ public class RoomService {
             }
             
             room.setUpdatedAt(java.time.LocalDateTime.now());
-            System.out.println("✅ User approved: " + userId + " in room " + roomId);
-            debugRoomState(roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("✅ User approved: " + userId + " in room " + roomId);
+            // debugRoomState(roomId);
         }
     }
 
@@ -174,8 +180,9 @@ public class RoomService {
             }
             
             room.setUpdatedAt(java.time.LocalDateTime.now());
-            System.out.println("❌ User rejected: " + userId + " in room " + roomId);
-            debugRoomState(roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("❌ User rejected: " + userId + " in room " + roomId);
+            // debugRoomState(roomId);
         }
     }
 
@@ -220,7 +227,8 @@ public class RoomService {
             rooms.remove(roomId);
             roomParticipants.remove(roomId);
             waitingUsers.remove(roomId);
-            System.out.println("🗑️ Room deleted by host: " + roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("🗑️ Room deleted by host: " + roomId);
         } else {
             throw new RuntimeException("Only host can delete room or room not found");
         }
@@ -243,8 +251,9 @@ public class RoomService {
             room.setMaxParticipants(settings.getMaxParticipants());
             room.setUpdatedAt(java.time.LocalDateTime.now());
             
-            System.out.println("⚙️ Room settings updated: " + roomId);
-            debugRoomState(roomId);
+            // 🔇 GIẢM LOG
+            // System.out.println("⚙️ Room settings updated: " + roomId);
+            // debugRoomState(roomId);
         }
         return room;
     }
