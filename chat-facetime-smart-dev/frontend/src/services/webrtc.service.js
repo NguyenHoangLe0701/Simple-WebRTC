@@ -15,6 +15,9 @@ class WebRTCService {
     this.connectionStartTimes = new Map(); // Map<userId, timestamp>
     this.CONNECTION_TIMEOUT_MS = 15000; // 15 giây timeout
     
+    // 🔥 FIX: Track pending offers để đảm bảo peer connection không bị mất
+    this.pendingOffers = new Map(); // Map<userId, promise> - track offers đang được tạo
+    
     // ============================================
     // CẤU HÌNH TURN SERVER TỐI ƯU CHO DEMO
     // Sử dụng Metered.ca - Ổn định & Miễn phí
@@ -250,80 +253,116 @@ class WebRTCService {
   }
 
   async createOffer(userId) {
-    try {
-      // 🔥 FIX: Đảm bảo peer connection được tạo và lưu trữ đúng cách
-      let pc = this.peerConnections.get(userId);
-      
-      // 🔥 FIX: Kiểm tra nếu đã có remote offer (offer collision)
-      // Nếu đã có remote offer, không tạo offer mới (để tránh conflict)
-      if (pc && pc.signalingState === 'have-remote-offer') {
-        console.log(`ℹ️ Remote offer already exists for ${userId}, skipping local offer creation`);
-        // Đợi answer được tạo từ handleOffer
-        return null;
+    // 🔥 FIX: Tránh tạo nhiều offers cùng lúc cho cùng một user
+    if (this.pendingOffers.has(userId)) {
+      console.log(`ℹ️ Offer already being created for ${userId}, waiting...`);
+      try {
+        return await this.pendingOffers.get(userId);
+      } catch (error) {
+        // Nếu offer trước đó failed, tiếp tục tạo mới
+        this.pendingOffers.delete(userId);
       }
-      
-      // Nếu đã có peer connection nhưng ở trạng thái không hợp lệ, đóng và tạo lại
-      if (pc) {
-        const state = pc.signalingState;
-        // Chỉ tạo offer nếu ở stable hoặc đã có local offer (có thể là retry)
-        if (state !== 'stable' && state !== 'have-local-offer') {
-          // Nếu đang ở have-remote-offer, không tạo offer (đã xử lý ở trên)
-          if (state === 'have-remote-offer') {
-            return null;
-          }
-          console.warn(`⚠️ Existing peer connection for ${userId} in invalid state: ${state}, recreating...`);
-          this.closePeerConnection(userId);
-          pc = null;
-        }
-      }
-      
-      // Tạo peer connection mới nếu chưa có hoặc đã đóng
-      if (!pc || pc.signalingState === 'closed') {
-        if (pc && pc.signalingState === 'closed') {
-          // Xóa connection cũ trước khi tạo mới
-          this.closePeerConnection(userId);
-        }
-        pc = this.createPeerConnection(userId);
-      }
-      
-      // 🔥 FIX: Đảm bảo peer connection đã được lưu vào Map
-      // createPeerConnection đã tự động lưu, nhưng double-check để an toàn
-      if (!this.peerConnections.has(userId) || this.peerConnections.get(userId) !== pc) {
-        this.peerConnections.set(userId, pc);
-      }
-      
-      // 🔥 FIX: Kiểm tra lại state trước khi tạo offer (có thể đã thay đổi)
-      if (pc.signalingState === 'have-remote-offer') {
-        console.log(`ℹ️ Remote offer detected for ${userId} during offer creation, skipping`);
-        return null;
-      }
-      
-      // 🔥 FIX: Track thời gian bắt đầu kết nối
-      this.connectionStartTimes.set(userId, Date.now());
-      
-      // 🔥 QUAN TRỌNG: Không dùng offerOptions với offerToReceiveAudio/Video
-      // Để browser tự động tạo SDP dựa trên tracks đã add
-      // Điều này đảm bảo m-lines được tạo đúng thứ tự
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      console.log(`✅ Created and set local offer for ${userId}`);
-      
-      // 🔥 FIX: Xử lý các pending answers và ICE candidates sau khi set local description
-      this.processPendingSignals(userId, pc);
-      
-      // 🔥 FIX: Chờ ICE gathering với timeout ngắn hơn để kết nối nhanh hơn
-      // Không cần chờ hoàn toàn complete, chỉ cần có một số candidates là đủ
-      if (pc.iceGatheringState !== 'complete') {
-        // Chờ tối đa 3 giây thay vì 5 giây để kết nối nhanh hơn
-        await this.waitForIceGathering(pc, userId, 3000);
-      }
-      
-      return pc.localDescription;
-      
-    } catch (error) {
-      console.error('❌ Error creating offer for', userId + ':', error);
-      throw error;
     }
+    
+    // 🔥 FIX: Tạo promise để track offer đang được tạo
+    const offerPromise = (async () => {
+      try {
+        // 🔥 FIX: Đảm bảo peer connection được tạo và lưu trữ đúng cách
+        let pc = this.peerConnections.get(userId);
+        
+        // 🔥 FIX: Kiểm tra nếu đã có remote offer (offer collision)
+        // Nếu đã có remote offer, không tạo offer mới (để tránh conflict)
+        if (pc && pc.signalingState === 'have-remote-offer') {
+          console.log(`ℹ️ Remote offer already exists for ${userId}, skipping local offer creation`);
+          // Đợi answer được tạo từ handleOffer
+          return null;
+        }
+        
+        // Nếu đã có peer connection nhưng ở trạng thái không hợp lệ, đóng và tạo lại
+        if (pc) {
+          const state = pc.signalingState;
+          // Chỉ tạo offer nếu ở stable hoặc đã có local offer (có thể là retry)
+          if (state !== 'stable' && state !== 'have-local-offer') {
+            // Nếu đang ở have-remote-offer, không tạo offer (đã xử lý ở trên)
+            if (state === 'have-remote-offer') {
+              return null;
+            }
+            console.warn(`⚠️ Existing peer connection for ${userId} in invalid state: ${state}, recreating...`);
+            this.closePeerConnection(userId);
+            pc = null;
+          }
+        }
+        
+        // Tạo peer connection mới nếu chưa có hoặc đã đóng
+        if (!pc || pc.signalingState === 'closed') {
+          if (pc && pc.signalingState === 'closed') {
+            // Xóa connection cũ trước khi tạo mới
+            this.closePeerConnection(userId);
+          }
+          pc = this.createPeerConnection(userId);
+        }
+        
+        // 🔥 FIX: Đảm bảo peer connection đã được lưu vào Map NGAY LẬP TỨC
+        // Điều này quan trọng để answer có thể tìm thấy connection
+        if (!this.peerConnections.has(userId) || this.peerConnections.get(userId) !== pc) {
+          this.peerConnections.set(userId, pc);
+          console.log(`💾 Peer connection saved for ${userId} before creating offer`);
+        }
+        
+        // 🔥 FIX: Kiểm tra lại state trước khi tạo offer (có thể đã thay đổi)
+        if (pc.signalingState === 'have-remote-offer') {
+          console.log(`ℹ️ Remote offer detected for ${userId} during offer creation, skipping`);
+          return null;
+        }
+        
+        // 🔥 FIX: Track thời gian bắt đầu kết nối
+        this.connectionStartTimes.set(userId, Date.now());
+        
+        // 🔥 QUAN TRỌNG: Không dùng offerOptions với offerToReceiveAudio/Video
+        // Để browser tự động tạo SDP dựa trên tracks đã add
+        // Điều này đảm bảo m-lines được tạo đúng thứ tự
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        console.log(`✅ Created and set local offer for ${userId}`);
+        
+        // 🔥 FIX: Đảm bảo peer connection vẫn còn trong Map sau khi set local description
+        // Đôi khi có thể bị xóa do race condition
+        if (!this.peerConnections.has(userId) || this.peerConnections.get(userId) !== pc) {
+          console.warn(`⚠️ Peer connection lost for ${userId} after setting local description, restoring...`);
+          this.peerConnections.set(userId, pc);
+        }
+        
+        // 🔥 FIX: Xử lý các pending answers và ICE candidates sau khi set local description
+        this.processPendingSignals(userId, pc);
+        
+        // 🔥 FIX: Chờ ICE gathering với timeout ngắn hơn để kết nối nhanh hơn
+        // Không cần chờ hoàn toàn complete, chỉ cần có một số candidates là đủ
+        if (pc.iceGatheringState !== 'complete') {
+          // Chờ tối đa 3 giây thay vì 5 giây để kết nối nhanh hơn
+          await this.waitForIceGathering(pc, userId, 3000);
+        }
+        
+        // 🔥 FIX: Final check - đảm bảo connection vẫn còn
+        if (!this.peerConnections.has(userId)) {
+          console.warn(`⚠️ Peer connection lost for ${userId} after ICE gathering, restoring...`);
+          this.peerConnections.set(userId, pc);
+        }
+        
+        return pc.localDescription;
+        
+      } catch (error) {
+        console.error('❌ Error creating offer for', userId + ':', error);
+        throw error;
+      } finally {
+        // Xóa pending offer promise
+        this.pendingOffers.delete(userId);
+      }
+    })();
+    
+    // Lưu promise để tránh tạo nhiều offers cùng lúc
+    this.pendingOffers.set(userId, offerPromise);
+    
+    return await offerPromise;
   }
 
   async waitForIceGathering(pc, userId, timeout = 3000) {
@@ -525,16 +564,34 @@ class WebRTCService {
       let pc = this.peerConnections.get(userId);
       
       if (!pc) {
-        // 🔥 FIX: Nếu không có peer connection, lưu answer vào queue để xử lý sau
-        console.warn('⚠️ No peer connection for answer from:', userId, '- queuing answer');
-        this.pendingAnswers.set(userId, answer);
-        
-        // Thử tạo peer connection nếu có local stream (có thể offer đang được tạo)
-        if (this.localStream) {
-          console.log('🔄 Attempting to create peer connection for pending answer:', userId);
-          // Không tạo offer ở đây, chỉ đợi offer được tạo từ phía kia
+        // 🔥 FIX: Nếu không có peer connection, kiểm tra xem có offer đang được tạo không
+        if (this.pendingOffers.has(userId)) {
+          console.log(`⏳ Offer being created for ${userId}, waiting for peer connection...`);
+          try {
+            // Đợi offer được tạo xong
+            await this.pendingOffers.get(userId);
+            // Thử lấy peer connection lại
+            pc = this.peerConnections.get(userId);
+            if (pc) {
+              console.log(`✅ Peer connection found for ${userId} after waiting for offer`);
+            }
+          } catch (error) {
+            console.warn(`⚠️ Error waiting for offer for ${userId}:`, error);
+          }
         }
-        return;
+        
+        // Nếu vẫn không có peer connection, lưu answer vào queue
+        if (!pc) {
+          console.warn('⚠️ No peer connection for answer from:', userId, '- queuing answer');
+          this.pendingAnswers.set(userId, answer);
+          
+          // Thử tạo peer connection nếu có local stream (có thể offer đang được tạo)
+          if (this.localStream) {
+            console.log('🔄 Attempting to create peer connection for pending answer:', userId);
+            // Không tạo offer ở đây, chỉ đợi offer được tạo từ phía kia
+          }
+          return;
+        }
       }
 
       // 🔥 FIX: Kiểm tra state chi tiết hơn
@@ -678,15 +735,32 @@ class WebRTCService {
         return;
       }
       
-      const pc = this.peerConnections.get(userId);
+      let pc = this.peerConnections.get(userId);
       if (!pc) {
-        // 🔥 FIX: Nếu không có peer connection, lưu candidate vào queue
-        console.warn('⚠️ No peer connection for ICE candidate from:', userId, '- queuing candidate');
-        if (!this.pendingIceCandidates.has(userId)) {
-          this.pendingIceCandidates.set(userId, []);
+        // 🔥 FIX: Nếu không có peer connection, kiểm tra xem có offer đang được tạo không
+        if (this.pendingOffers.has(userId)) {
+          try {
+            // Đợi offer được tạo xong
+            await this.pendingOffers.get(userId);
+            // Thử lấy peer connection lại
+            pc = this.peerConnections.get(userId);
+            if (pc) {
+              console.log(`✅ Peer connection found for ${userId} after waiting for offer (ICE candidate)`);
+            }
+          } catch (error) {
+            // Ignore error
+          }
         }
-        this.pendingIceCandidates.get(userId).push(candidate);
-        return;
+        
+        // Nếu vẫn không có peer connection, lưu candidate vào queue
+        if (!pc) {
+          console.warn('⚠️ No peer connection for ICE candidate from:', userId, '- queuing candidate');
+          if (!this.pendingIceCandidates.has(userId)) {
+            this.pendingIceCandidates.set(userId, []);
+          }
+          this.pendingIceCandidates.get(userId).push(candidate);
+          return;
+        }
       }
       
       // 🔥 FIX: Chỉ add candidate khi ở trạng thái hợp lệ
@@ -823,6 +897,7 @@ class WebRTCService {
     this.pendingIceCandidates.delete(userId);
     this.pendingAnswers.delete(userId);
     this.connectionStartTimes.delete(userId);
+    this.pendingOffers.delete(userId);
   }
   
   // 🔥 FIX: Monitor connection timeout để detect slow connections
