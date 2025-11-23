@@ -254,10 +254,23 @@ class WebRTCService {
       // 🔥 FIX: Đảm bảo peer connection được tạo và lưu trữ đúng cách
       let pc = this.peerConnections.get(userId);
       
+      // 🔥 FIX: Kiểm tra nếu đã có remote offer (offer collision)
+      // Nếu đã có remote offer, không tạo offer mới (để tránh conflict)
+      if (pc && pc.signalingState === 'have-remote-offer') {
+        console.log(`ℹ️ Remote offer already exists for ${userId}, skipping local offer creation`);
+        // Đợi answer được tạo từ handleOffer
+        return null;
+      }
+      
       // Nếu đã có peer connection nhưng ở trạng thái không hợp lệ, đóng và tạo lại
       if (pc) {
         const state = pc.signalingState;
+        // Chỉ tạo offer nếu ở stable hoặc đã có local offer (có thể là retry)
         if (state !== 'stable' && state !== 'have-local-offer') {
+          // Nếu đang ở have-remote-offer, không tạo offer (đã xử lý ở trên)
+          if (state === 'have-remote-offer') {
+            return null;
+          }
           console.warn(`⚠️ Existing peer connection for ${userId} in invalid state: ${state}, recreating...`);
           this.closePeerConnection(userId);
           pc = null;
@@ -279,6 +292,12 @@ class WebRTCService {
         this.peerConnections.set(userId, pc);
       }
       
+      // 🔥 FIX: Kiểm tra lại state trước khi tạo offer (có thể đã thay đổi)
+      if (pc.signalingState === 'have-remote-offer') {
+        console.log(`ℹ️ Remote offer detected for ${userId} during offer creation, skipping`);
+        return null;
+      }
+      
       // 🔥 FIX: Track thời gian bắt đầu kết nối
       this.connectionStartTimes.set(userId, Date.now());
       
@@ -287,6 +306,7 @@ class WebRTCService {
       // Điều này đảm bảo m-lines được tạo đúng thứ tự
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
+      console.log(`✅ Created and set local offer for ${userId}`);
       
       // 🔥 FIX: Xử lý các pending answers và ICE candidates sau khi set local description
       this.processPendingSignals(userId, pc);
@@ -412,15 +432,27 @@ class WebRTCService {
   async handleOffer(userId, offer) {
     try {
       let pc = this.peerConnections.get(userId);
+      const currentState = pc?.signalingState;
+      
+      // 🔥 FIX: Xử lý offer collision - khi cả 2 users cùng tạo offer
+      // Nếu đã có local offer (have-local-offer), rollback và xử lý remote offer
+      if (currentState === 'have-local-offer') {
+        console.log(`🔄 Offer collision detected for ${userId} - rolling back local offer and accepting remote offer`);
+        // Đóng connection cũ và tạo mới để xử lý remote offer
+        this.closePeerConnection(userId);
+        pc = this.createPeerConnection(userId);
+      }
       
       // Nếu peer connection đã tồn tại, kiểm tra state
       if (pc) {
         // Nếu đã ở trạng thái have-remote-offer hoặc have-local-answer, đóng và tạo mới
         if (pc.signalingState === 'have-remote-offer' || pc.signalingState === 'have-local-answer') {
+          console.warn(`⚠️ Connection for ${userId} in invalid state ${pc.signalingState}, recreating...`);
           this.closePeerConnection(userId);
           pc = this.createPeerConnection(userId);
         } else if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-local-offer') {
           // Nếu không ở trạng thái phù hợp, tạo mới
+          console.warn(`⚠️ Connection for ${userId} in unexpected state ${pc.signalingState}, recreating...`);
           this.closePeerConnection(userId);
           pc = this.createPeerConnection(userId);
         }
@@ -428,10 +460,12 @@ class WebRTCService {
         pc = this.createPeerConnection(userId);
       }
       
-      // Chỉ set remote description nếu đang ở trạng thái stable (chưa có offer nào)
+      // 🔥 FIX: Chỉ set remote description nếu đang ở trạng thái stable
+      // Nếu đã có local offer, đã được xử lý ở trên (rollback)
       if (pc.signalingState === 'stable') {
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          console.log(`✅ Set remote offer for ${userId}`);
         } catch (setError) {
           // Nếu lỗi khi set remote description, đóng và tạo lại
           if (setError.name === 'InvalidAccessError' || setError.name === 'InvalidStateError') {
@@ -441,8 +475,13 @@ class WebRTCService {
           }
           throw setError;
         }
+      } else if (pc.signalingState === 'have-local-offer') {
+        // Nếu vẫn còn local offer (chưa rollback được), bỏ qua
+        console.warn(`⚠️ Cannot handle offer for ${userId} - still have local offer, skipping`);
+        return null;
       } else {
-        // Nếu không ở stable, bỏ qua offer này (có thể đã được xử lý)
+        // Trạng thái khác, bỏ qua
+        console.warn(`⚠️ Cannot handle offer for ${userId} - invalid state: ${pc.signalingState}`);
         return null;
       }
       
@@ -451,6 +490,7 @@ class WebRTCService {
       // Điều này đảm bảo thứ tự m-lines khớp với offer
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
+      console.log(`✅ Created and set local answer for ${userId}`);
       
       // 🔥 FIX: Xử lý các pending ICE candidates sau khi set local description
       await this.processPendingIceCandidates(userId, pc);
@@ -460,6 +500,7 @@ class WebRTCService {
     } catch (error) {
       // Nếu lỗi là InvalidStateError, có thể do race condition, bỏ qua
       if (error.name === 'InvalidStateError') {
+        console.warn(`⚠️ InvalidStateError handling offer for ${userId}, likely race condition`);
         return null;
       }
       // Nếu lỗi InvalidAccessError (m-lines mismatch), đóng connection
@@ -501,17 +542,52 @@ class WebRTCService {
       console.log(`🔍 Current signaling state for ${userId}:`, currentState);
       
       if (currentState === 'stable') {
-        // 🔥 FIX: Nếu ở stable, có thể offer chưa được set local description
-        // Kiểm tra xem có local description không
+        // 🔥 FIX: Nếu ở stable, kiểm tra xem có local description không
         if (!pc.localDescription) {
-          console.warn('⚠️ Answer received but no local offer set for:', userId, '- this should not happen');
+          console.warn('⚠️ Answer received but no local offer set for:', userId, '- queuing answer');
           // Lưu answer vào queue để xử lý sau khi offer được tạo
           this.pendingAnswers.set(userId, answer);
           return;
         }
-        // Nếu đã có local description nhưng vẫn ở stable, có thể đã được xử lý
-        console.warn('⚠️ Answer received in stable state for:', userId, '- ignoring (likely already processed)');
-        return;
+        
+        // 🔥 FIX: Nếu đã có local description nhưng state là stable
+        // Có thể là answer đến muộn sau khi đã xử lý xong
+        // Hoặc có thể là answer cho một offer khác (offer collision resolution)
+        // Kiểm tra xem answer này có match với local offer không
+        const localOfferSdp = pc.localDescription.sdp;
+        const answerSdp = answer.sdp;
+        
+        // Nếu answer có fingerprint khác với offer, có thể là answer cũ
+        const localFingerprint = localOfferSdp.match(/a=fingerprint:(\w+)/)?.[1];
+        const answerFingerprint = answerSdp.match(/a=fingerprint:(\w+)/)?.[1];
+        
+        if (localFingerprint && answerFingerprint && localFingerprint !== answerFingerprint) {
+          console.warn('⚠️ Answer fingerprint mismatch for:', userId, '- likely stale answer, ignoring');
+          return;
+        }
+        
+        // Nếu match, có thể answer đến muộn nhưng vẫn hợp lệ
+        // Thử set remote description nếu có thể
+        try {
+          // Kiểm tra xem có remote description chưa
+          if (!pc.remoteDescription) {
+            console.log('🔄 Answer received in stable state but no remote description - attempting to set');
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            console.log('✅ Successfully set late answer for:', userId);
+            await this.processPendingIceCandidates(userId, pc);
+            return;
+          } else {
+            // Đã có remote description, answer này có thể là duplicate
+            console.warn('⚠️ Answer received in stable state with existing remote description - likely duplicate, ignoring');
+            return;
+          }
+        } catch (error) {
+          if (error.name === 'InvalidStateError') {
+            console.warn('⚠️ Cannot set answer in stable state - likely already processed');
+            return;
+          }
+          throw error;
+        }
       }
       
       if (currentState !== 'have-local-offer') {
