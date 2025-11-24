@@ -13,13 +13,12 @@ import com.smartchat.chatfacetimesmartdev.dto.GeminiDto;
 @Service
 public class AIService {
 
-    @Value("${gemini.api.key:}") // 🆕 THÊM DEFAULT VALUE
+    @Value("${gemini.api.key:}")
     private String geminiApiKey;
 
     @Autowired
     private RestTemplate restTemplate;
 
-    // Đây là "Kho học liệu nhỏ" của bạn, được set sẵn
     private final String KNOWLEDGE_BASE =
             "--- KIẾN THỨC CHUYÊN SÂU VỀ WEBRTC, SOCKET, VÀ TCP ---" +
 
@@ -40,9 +39,6 @@ public class AIService {
 
                     "--- KẾT THÚC KIẾN THỨC ---";
 
-    /**
-     * Kiểm tra xem câu hỏi có liên quan đến kho học liệu không
-     */
     private boolean isRelatedToKnowledgeBase(String userInput) {
         String lowerInput = userInput.toLowerCase();
         String[] keywords = {"webrtc", "socket", "websocket", "tcp", "udp", "p2p", "peer-to-peer", 
@@ -56,20 +52,16 @@ public class AIService {
     }
 
     public String getAIResponse(String userInput) {
-        // 🆕 KIỂM TRA API KEY
         if (geminiApiKey == null || geminiApiKey.isEmpty()) {
             return "Xin lỗi, dịch vụ AI hiện không khả dụng. Vui lòng thử lại sau.";
         }
 
-        // URL không có query parameter, sẽ dùng header thay thế
         String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-        // Xây dựng prompt thông minh
         String fullPrompt;
         boolean isRelated = isRelatedToKnowledgeBase(userInput);
         
         if (isRelated) {
-            // Nếu liên quan đến kho học liệu, ưu tiên sử dụng kiến thức đó
             fullPrompt = "Bạn là một trợ lý AI chuyên gia. " +
                     "Khi trả lời câu hỏi về WebRTC, Socket, hoặc TCP, hãy ưu tiên sử dụng kiến thức chuyên sâu sau đây: " +
                     "\n\n" + KNOWLEDGE_BASE + "\n\n" +
@@ -80,7 +72,6 @@ public class AIService {
                     "4. Nếu câu hỏi không liên quan đến 3 chủ đề trên, vẫn trả lời bình thường bằng kiến thức của bạn." +
                     "\n\nCâu hỏi của người dùng: " + userInput;
         } else {
-            // Nếu không liên quan, trả lời tự do nhưng vẫn có thể tham khảo kho học liệu nếu cần
             fullPrompt = "Bạn là một trợ lý AI thông minh và hữu ích. " +
                     "Trả lời câu hỏi của người dùng một cách chi tiết, chính xác và dễ hiểu. " +
                     "Luôn trả lời bằng tiếng Việt. " +
@@ -89,22 +80,17 @@ public class AIService {
                     "Câu hỏi của người dùng: " + userInput;
         }
 
-        // Tạo Request Body
         GeminiDto.GeminiRequest requestBody = new GeminiDto.GeminiRequest(fullPrompt);
 
-        // Thiết lập Headers (sử dụng header X-goog-api-key như trong curl example)
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("X-goog-api-key", geminiApiKey);
 
-        // Gói Request
         HttpEntity<GeminiDto.GeminiRequest> entity = new HttpEntity<>(requestBody, headers);
 
         try {
-            // Gọi API
             GeminiDto.GeminiResponse response = restTemplate.postForObject(geminiUrl, entity, GeminiDto.GeminiResponse.class);
 
-            // Xử lý và trả về kết quả
             if (response != null && 
                 response.candidates != null && 
                 !response.candidates.isEmpty() &&

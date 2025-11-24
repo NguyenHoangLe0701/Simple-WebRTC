@@ -21,7 +21,6 @@ public class CodeExecutionService {
     private final String sandboxUrl;
 
     public CodeExecutionService() {
-        // Set timeout cho RestTemplate (connect + read)
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout((int) Duration.ofSeconds(5).toMillis());
         factory.setReadTimeout((int) Duration.ofSeconds(20).toMillis());

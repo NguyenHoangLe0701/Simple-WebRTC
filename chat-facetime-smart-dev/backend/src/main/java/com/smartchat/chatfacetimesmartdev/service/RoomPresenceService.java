@@ -38,7 +38,6 @@ public class RoomPresenceService {
         return roomUsers != null ? roomUsers.get(userId) : null;
     }
 
-    // Giữ lại các method cần thiết, xóa bớt method không dùng
     public boolean isUserInRoom(String roomId, String userId) {
         Map<String, UserPresence> roomUsers = roomPresence.get(roomId);
         return roomUsers != null && roomUsers.containsKey(userId);

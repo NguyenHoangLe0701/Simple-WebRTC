@@ -26,20 +26,15 @@ public class SecurityService {
     @Autowired
     private UserRepository userRepository;
     
-    private static final int SESSION_TIMEOUT_MINUTES = 30; // 30 minutes timeout
+    private static final int SESSION_TIMEOUT_MINUTES = 30;
     
-    /**
-     * Tạo login session khi user đăng nhập
-     */
     @Transactional
     public LoginSession createLoginSession(Long userId, String ipAddress, String userAgent, String deviceInfo) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new RuntimeException("User not found"));
         
-        // Tạo session ID
         String sessionId = UUID.randomUUID().toString();
         
-        // Tạo login session
         LoginSession session = new LoginSession();
         session.setSessionId(sessionId);
         session.setUser(user);
@@ -53,9 +48,6 @@ public class SecurityService {
         return loginSessionRepository.save(session);
     }
     
-    /**
-     * Lấy danh sách active sessions
-     */
     public List<ActiveSessionDTO> getActiveSessions() {
         try {
             List<LoginSession> sessions = loginSessionRepository.findByStatusOrderByLastActivityDesc(SessionStatus.ACTIVE);
@@ -65,14 +57,10 @@ public class SecurityService {
         } catch (Exception e) {
             System.err.println("Error getting active sessions: " + e.getMessage());
             e.printStackTrace();
-            // Trả về empty list nếu có lỗi (bảng có thể chưa tồn tại)
             return new java.util.ArrayList<>();
         }
     }
     
-    /**
-     * Lấy active sessions theo userId
-     */
     public List<ActiveSessionDTO> getActiveSessionsByUserId(Long userId) {
         try {
             List<LoginSession> sessions = loginSessionRepository.findByUserIdAndStatusOrderByLastActivityDesc(userId, SessionStatus.ACTIVE);
@@ -86,9 +74,6 @@ public class SecurityService {
         }
     }
     
-    /**
-     * Force logout session
-     */
     @Transactional
     public boolean forceLogout(String sessionId) {
         Optional<LoginSession> sessionOpt = loginSessionRepository.findBySessionId(sessionId);
@@ -102,9 +87,6 @@ public class SecurityService {
         return false;
     }
     
-    /**
-     * Force logout tất cả sessions của user
-     */
     @Transactional
     public int forceLogoutAllUserSessions(Long userId) {
         List<LoginSession> sessions = loginSessionRepository.findByUserIdAndStatus(userId, SessionStatus.ACTIVE);
@@ -116,9 +98,6 @@ public class SecurityService {
         return sessions.size();
     }
     
-    /**
-     * Cập nhật last activity
-     */
     @Transactional
     public void updateLastActivity(String sessionId) {
         Optional<LoginSession> sessionOpt = loginSessionRepository.findBySessionId(sessionId);
@@ -131,22 +110,17 @@ public class SecurityService {
         }
     }
     
-    /**
-     * Cleanup expired sessions
-     */
     @Transactional
     public int cleanupExpiredSessions() {
         try {
             LocalDateTime expiryTime = LocalDateTime.now().minusMinutes(SESSION_TIMEOUT_MINUTES);
             
-            // Expire old sessions
             int expiredCount = loginSessionRepository.expireOldSessions(
                 expiryTime, 
                 SessionStatus.ACTIVE, 
                 SessionStatus.EXPIRED
             );
             
-            // Delete very old expired sessions (older than 7 days)
             LocalDateTime deleteBefore = LocalDateTime.now().minusDays(7);
             int deletedCount = loginSessionRepository.deleteExpiredSessions(deleteBefore, SessionStatus.EXPIRED);
             
@@ -158,9 +132,6 @@ public class SecurityService {
         }
     }
     
-    /**
-     * Lấy login history
-     */
     public List<ActiveSessionDTO> getLoginHistory(int days) {
         try {
             LocalDateTime startDate = LocalDateTime.now().minusDays(days);
@@ -179,9 +150,6 @@ public class SecurityService {
         }
     }
     
-    /**
-     * Lấy thống kê sessions
-     */
     public java.util.Map<String, Object> getSessionStats() {
         try {
             long activeSessions = loginSessionRepository.countByStatus(SessionStatus.ACTIVE);
@@ -197,7 +165,6 @@ public class SecurityService {
         } catch (Exception e) {
             System.err.println("Error getting session stats: " + e.getMessage());
             e.printStackTrace();
-            // Trả về stats mặc định nếu có lỗi
             java.util.Map<String, Object> stats = new java.util.HashMap<>();
             stats.put("activeSessions", 0);
             stats.put("todayLogins", 0);
@@ -206,15 +173,11 @@ public class SecurityService {
         }
     }
     
-    /**
-     * Convert LoginSession to ActiveSessionDTO
-     */
     private ActiveSessionDTO convertToDTO(LoginSession session) {
         ActiveSessionDTO dto = new ActiveSessionDTO();
         dto.setId(session.getId());
         dto.setSessionId(session.getSessionId());
         
-        // Kiểm tra user có tồn tại không
         if (session.getUser() != null) {
             dto.setUserId(session.getUser().getId());
             dto.setUsername(session.getUser().getUsername());
@@ -232,7 +195,6 @@ public class SecurityService {
         dto.setDeviceInfo(session.getDeviceInfo());
         dto.setLoginTime(session.getLoginTime());
         dto.setLastActivity(session.getLastActivity());
-        // Duration được tính tự động qua getter
         dto.setStatus(session.getStatus() != null ? session.getStatus().name() : "UNKNOWN");
         
         return dto;

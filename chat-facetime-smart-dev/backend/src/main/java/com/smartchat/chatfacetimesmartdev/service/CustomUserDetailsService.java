@@ -19,10 +19,8 @@ public class CustomUserDetailsService implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String usernameOrEmail) throws UsernameNotFoundException {
-        // Tìm user theo username trước
         Optional<User> userOpt = userRepository.findByUsername(usernameOrEmail);
         
-        // Nếu không có username thì thử tìm theo email
         if (userOpt.isEmpty()) {
             userOpt = userRepository.findByEmail(usernameOrEmail);
         }
@@ -33,7 +31,6 @@ public class CustomUserDetailsService implements UserDetailsService {
         
         User user = userOpt.get();
         
-        // SỬA Ở ĐÂY: Không cần getActive() vì User đã implement isEnabled()
         if (!user.isEnabled()) {
             throw new UsernameNotFoundException("User account is disabled: " + usernameOrEmail);
         }

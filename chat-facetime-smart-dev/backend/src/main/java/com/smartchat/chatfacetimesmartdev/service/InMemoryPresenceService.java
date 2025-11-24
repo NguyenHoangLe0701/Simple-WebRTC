@@ -2,7 +2,7 @@ package com.smartchat.chatfacetimesmartdev.service;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;  // GIỮ IMPORT NÀY
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Service;
@@ -21,7 +21,7 @@ public class InMemoryPresenceService implements PresenceService {
         user.setUserId(userId);
         user.setFullName(fullName);
         user.setStatus("online");
-        user.setLastSeen(LocalDateTime.now());  // DÙNG LocalDateTime.now()
+        user.setLastSeen(LocalDateTime.now());
         user.setInCall(false);
         
         onlineUsers.put(userId, user);
@@ -35,7 +35,7 @@ public class InMemoryPresenceService implements PresenceService {
             UserPresence user = onlineUsers.get(userId);
             if (user != null) {
                 user.setStatus("offline");
-                user.setLastSeen(LocalDateTime.now());  // DÙNG LocalDateTime.now()
+                user.setLastSeen(LocalDateTime.now());
             }
         }
     }
@@ -45,7 +45,7 @@ public class InMemoryPresenceService implements PresenceService {
         UserPresence user = onlineUsers.get(userId);
         if (user != null) {
             user.setStatus(status);
-            user.setLastSeen(LocalDateTime.now());  // DÙNG LocalDateTime.now()
+            user.setLastSeen(LocalDateTime.now());
         }
     }
 
@@ -66,7 +66,7 @@ public class InMemoryPresenceService implements PresenceService {
         UserPresence user = onlineUsers.get(userId);
         if (user != null) {
             user.setInCall(inCall);
-            user.setLastSeen(LocalDateTime.now());  // DÙNG LocalDateTime.now()
+            user.setLastSeen(LocalDateTime.now());
         }
     }
 }

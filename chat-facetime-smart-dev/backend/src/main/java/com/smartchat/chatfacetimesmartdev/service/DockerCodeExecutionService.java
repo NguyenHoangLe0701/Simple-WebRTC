@@ -42,7 +42,6 @@ public class DockerCodeExecutionService {
                     endpoint, HttpMethod.POST, request, Map.class
             );
 
-            // ❗ HTTP không OK
             if (!response.getStatusCode().is2xxSuccessful()) {
                 return new CodeExecutionResult(
                         "", "Sandbox returned: " + response.getStatusCode(), false
@@ -58,17 +57,14 @@ public class DockerCodeExecutionService {
             String error  = String.valueOf(body.getOrDefault("error", ""));
             boolean success = Boolean.TRUE.equals(body.get("success"));
 
-            // ❗ Nếu error có nội dung → coi là lỗi code
             if (error != null && !error.isBlank()) {
                 return new CodeExecutionResult(output, error, false);
             }
 
-            // ❗ Nếu sandbox báo không success
             if (!success) {
                 return new CodeExecutionResult(output, "Execution failed", false);
             }
 
-            // OK
             return new CodeExecutionResult(output, "", true);
 
         } catch (ResourceAccessException e) {
@@ -81,8 +77,6 @@ public class DockerCodeExecutionService {
             return new CodeExecutionResult("", "Internal error: " + e.getMessage(), false);
         }
     }
-
-    // ---- Languages ----
 
     public CodeExecutionResult executePython(String code, String fileName) {
         return callSandbox(sandboxUrl + "/run/python", Map.of("code", code));

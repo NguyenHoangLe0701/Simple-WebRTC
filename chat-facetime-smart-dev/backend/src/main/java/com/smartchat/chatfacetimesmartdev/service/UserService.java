@@ -54,7 +54,6 @@ public class UserService {
         List<User> allUsers = userRepository.findAll();
         long totalUsers = allUsers.size();
         
-        // SỬA Ở ĐÂY: thay user.getActive() thành user.isActive()
         long activeUsers = allUsers.stream().filter(user -> user.isActive()).count();
         long adminUsers = allUsers.stream().filter(user -> user.getRole() == User.Role.ADMIN).count();
         
