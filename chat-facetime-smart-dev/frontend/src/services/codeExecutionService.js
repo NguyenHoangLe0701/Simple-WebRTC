@@ -1,7 +1,6 @@
 import api from './api';
 
 export const codeExecutionService = {
-  // Execute code for any language
   executeCode: (code, language, fileName) => {
     return api.post('/api/code/execute', {
       code: code,
@@ -10,7 +9,6 @@ export const codeExecutionService = {
     });
   },
 
-  // Individual language methods
   executePython: (code) => {
     return api.post('/api/code/execute/python', {
       code: code,
@@ -43,7 +41,6 @@ export const codeExecutionService = {
     });
   },
 
-  // File operations
   saveFile: (fileName, content) => {
     return api.post('/api/code/save', {
       fileName: fileName,

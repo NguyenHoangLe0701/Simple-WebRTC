@@ -1,4 +1,3 @@
-// services/sessionAnalyticsService.js
 import api from './api';
 
 export const sessionAnalyticsService = {
