@@ -4,7 +4,6 @@ public class SaveFileRequest {
     private String fileName;
     private String content;
 
-    // Constructors, getters, setters
     public SaveFileRequest() {}
 
     public SaveFileRequest(String fileName, String content) {
@@ -12,7 +11,6 @@ public class SaveFileRequest {
         this.content = content;
     }
 
-    // Getters and setters
     public String getFileName() { return fileName; }
     public void setFileName(String fileName) { this.fileName = fileName; }
 

@@ -60,11 +60,9 @@ public class Room {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    // ---- NEW: Relationships ----
     @OneToMany(mappedBy = "room", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<RoomApprovedUser> approvedUsers = new HashSet<>();
 
-    // Constructors
     public Room() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
@@ -79,7 +77,6 @@ public class Room {
         this.hostName = hostName;
     }
 
-    // --- Getters & Setters ---
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -125,7 +122,6 @@ public class Room {
     public Set<RoomApprovedUser> getApprovedUsers() { return approvedUsers; }
     public void setApprovedUsers(Set<RoomApprovedUser> approvedUsers) { this.approvedUsers = approvedUsers; }
 
-    // --- Helper method for relationship ---
     public void addApprovedUser(RoomApprovedUser approvedUser) {
         approvedUsers.add(approvedUser);
     }

@@ -6,7 +6,6 @@ public class LoadFileResponse {
     private boolean success;
     private String message;
 
-    // Constructors, getters, setters
     public LoadFileResponse() {}
 
     public LoadFileResponse(String content, boolean success, String message) {
@@ -15,7 +14,6 @@ public class LoadFileResponse {
         this.message = message;
     }
 
-    // Getters and setters
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
 

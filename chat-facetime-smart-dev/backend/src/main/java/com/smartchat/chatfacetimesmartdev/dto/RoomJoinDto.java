@@ -10,14 +10,12 @@ public class RoomJoinDto {
     @NotBlank(message = "User ID is required")
     private String userId;
     
-    private String password; // For private rooms
+    private String password;
     
-    // THÊM CÁC FIELD MỚI
     private String username;
     private String fullName;
     private String email;
 
-    // Getters and Setters
     public String getRoomId() { return roomId; }
     public void setRoomId(String roomId) { this.roomId = roomId; }
 
@@ -27,7 +25,6 @@ public class RoomJoinDto {
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
 
-    // THÊM GETTER/SETTER CHO CÁC FIELD MỚI
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
 

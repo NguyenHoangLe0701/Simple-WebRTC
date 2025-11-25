@@ -12,7 +12,6 @@ public class RoomCreateDto {
     private String description;
     private boolean isPublic = true;
     
-    // THÊM CÁC FIELD MỚI
     private String roomId;
     private String hostId;
     private String hostName;
@@ -21,7 +20,6 @@ public class RoomCreateDto {
     private boolean allowScreenShare = true;
     private boolean allowChat = true;
 
-    // Getters and Setters
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
 
@@ -31,7 +29,6 @@ public class RoomCreateDto {
     public boolean isPublic() { return isPublic; }
     public void setPublic(boolean isPublic) { this.isPublic = isPublic; }
 
-    // THÊM GETTER/SETTER CHO CÁC FIELD MỚI
     public String getRoomId() { return roomId; }
     public void setRoomId(String roomId) { this.roomId = roomId; }
 

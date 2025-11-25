@@ -405,11 +405,9 @@ public class ChatMessage {
     private Map<String, Object> replyTo;
     private Map<String, Object> reactions;
 
-    // Constructor không tham số (Bắt buộc cho Jackson và fix lỗi "found: no arguments")
     public ChatMessage() {
     }
 
-    // Constructor đầy đủ tham số
     public ChatMessage(String id, String roomId, String senderId, String senderName, String sender, String content, MessageType type, Instant timestamp, String codeLanguage, String fileName, String avatar, Map<String, Object> replyTo, Map<String, Object> reactions) {
         this.id = id;
         this.roomId = roomId;
@@ -426,7 +424,6 @@ public class ChatMessage {
         this.reactions = reactions;
     }
 
-    // Các Getter và Setter thủ công (Fix lỗi "cannot find symbol method set...")
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
 
@@ -467,7 +464,6 @@ public class ChatMessage {
     public Map<String, Object> getReactions() { return reactions; }
     public void setReactions(Map<String, Object> reactions) { this.reactions = reactions; }
 
-    // Enum MessageType
     public enum MessageType {
         TEXT, CODE, FILE, IMAGE, VIDEO_CALL, VOICE_CALL, SYSTEM, EDIT, DELETE, REACTION;
 
@@ -486,7 +482,6 @@ public class ChatMessage {
             return this.name().toLowerCase();
         }
         
-        // Helper methods cho enum
         public boolean isMedia() { return this == IMAGE || this == FILE; }
         public boolean isCall() { return this == VIDEO_CALL || this == VOICE_CALL; }
         public boolean isSystem() { return this == SYSTEM; }

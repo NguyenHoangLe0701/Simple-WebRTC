@@ -5,7 +5,6 @@ public class FileOperationResult {
     private boolean success;
     private String message;
 
-    // Constructors, getters, setters
     public FileOperationResult() {}
 
     public FileOperationResult(boolean success, String message) {
@@ -13,7 +12,6 @@ public class FileOperationResult {
         this.message = message;
     }
 
-    // Getters and setters
     public boolean isSuccess() { return success; }
     public void setSuccess(boolean success) { this.success = success; }
 

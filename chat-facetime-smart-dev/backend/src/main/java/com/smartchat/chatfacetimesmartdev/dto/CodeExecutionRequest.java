@@ -5,7 +5,6 @@ public class CodeExecutionRequest {
     private String language;
     private String fileName;
 
-    // Constructors, getters, setters
     public CodeExecutionRequest() {}
 
     public CodeExecutionRequest(String code, String language, String fileName) {
@@ -14,7 +13,6 @@ public class CodeExecutionRequest {
         this.fileName = fileName;
     }
 
-    // Getters and setters
     public String getCode() { return code; }
     public void setCode(String code) { this.code = code; }
 

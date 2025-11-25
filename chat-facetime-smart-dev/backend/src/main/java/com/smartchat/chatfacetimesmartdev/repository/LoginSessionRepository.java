@@ -14,7 +14,7 @@ import com.smartchat.chatfacetimesmartdev.entity.LoginSession;
 import com.smartchat.chatfacetimesmartdev.entity.LoginSession.SessionStatus;
 
 @Repository
-public interface    LoginSessionRepository extends JpaRepository<LoginSession, Long> {
+public interface LoginSessionRepository extends JpaRepository<LoginSession, Long> {
     
     Optional<LoginSession> findBySessionId(String sessionId);
     

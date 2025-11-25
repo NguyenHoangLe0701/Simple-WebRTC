@@ -24,7 +24,6 @@ public class ActiveSessionDTO {
     private LocalDateTime lastActivity;
     private String status;
     
-    // Duration được tính tự động khi cần
     public String getDuration() {
         if (loginTime == null) return "N/A";
         LocalDateTime endTime = lastActivity != null ? lastActivity : LocalDateTime.now();

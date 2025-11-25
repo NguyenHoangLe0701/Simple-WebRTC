@@ -69,7 +69,6 @@ public class User implements UserDetails {
         this.updatedAt = LocalDateTime.now();
     }
     
-    // UserDetails implementation
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role.name()));
@@ -99,7 +98,6 @@ public class User implements UserDetails {
         ADMIN, USER
     }
     
-    // Helper method để update last login
     public void updateLastLogin() {
         this.lastLogin = LocalDateTime.now();
     }

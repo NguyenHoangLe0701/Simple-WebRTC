@@ -13,7 +13,6 @@ public class CodeExecutionResult {
         this.success = success;
     }
 
-    // Getters and setters
     public String getOutput() { return output; }
     public void setOutput(String output) { this.output = output; }
 

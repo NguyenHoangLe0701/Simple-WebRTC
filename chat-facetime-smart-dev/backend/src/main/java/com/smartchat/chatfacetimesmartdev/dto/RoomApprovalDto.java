@@ -2,11 +2,10 @@ package com.smartchat.chatfacetimesmartdev.dto;
 
 public class RoomApprovalDto {
     
-    private Long userId;  // THÊM TRƯỜNG NÀY
+    private Long userId;
     private boolean approved;
     private String reason;
 
-    // THÊM GETTER VÀ SETTER CHO userId
     public Long getUserId() {
         return userId;
     }
@@ -15,7 +14,6 @@ public class RoomApprovalDto {
         this.userId = userId;
     }
 
-    // Getters and Setters cũ
     public boolean isApproved() {
         return approved;
     }

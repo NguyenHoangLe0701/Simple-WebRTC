@@ -11,20 +11,17 @@ public class UserPresence {
     private boolean inCall;
     private String avatar;
 
-    // DEFAULT CONSTRUCTOR
     public UserPresence() {}
 
-    // CONSTRUCTOR WITH PARAMETERS (THÊM CONSTRUCTOR NÀY)
     public UserPresence(String userId, String username, String fullName, String status, long lastSeenTimestamp) {
         this.userId = userId;
         this.username = username;
         this.fullName = fullName;
         this.status = status;
-        this.lastSeen = LocalDateTime.now(); // Hoặc convert từ timestamp nếu cần
+        this.lastSeen = LocalDateTime.now();
         this.inCall = false;
     }
 
-    // Getters and Setters (giữ nguyên)
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
     
