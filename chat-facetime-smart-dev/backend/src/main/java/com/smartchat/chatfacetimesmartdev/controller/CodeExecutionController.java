@@ -21,7 +21,6 @@ public class CodeExecutionController {
     @PostMapping("/execute")
     public ResponseEntity<CodeExecutionResult> executeCode(@RequestBody CodeExecutionRequest request) {
         try {
-            // Validate input
             if (request.getCode() == null || request.getCode().trim().isEmpty()) {
                 return ResponseEntity.badRequest()
                         .body(new CodeExecutionResult("", "Code cannot be empty", false));
@@ -67,14 +66,12 @@ public class CodeExecutionController {
                             .body(new CodeExecutionResult("", "Unsupported language: " + language, false));
             }
 
-            // Đảm bảo result không null
             if (result == null) {
                 result = new CodeExecutionResult("", "Execution returned null result", false);
             }
 
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            // Log lỗi chi tiết
             System.err.println("Error executing code: " + e.getMessage());
             e.printStackTrace();
 
@@ -83,7 +80,6 @@ public class CodeExecutionController {
         }
     }
 
-    // Các endpoints riêng cho từng ngôn ngữ
     @PostMapping("/execute/python")
     public ResponseEntity<CodeExecutionResult> executePythonCode(@RequestBody CodeExecutionRequest request) {
         try {

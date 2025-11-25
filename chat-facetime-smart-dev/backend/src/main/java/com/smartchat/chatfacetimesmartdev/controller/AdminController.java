@@ -89,11 +89,9 @@ public class AdminController {
             Optional<User> userOpt = userRepository.findById(id);
             if (userOpt.isPresent()) {
                 User user = userOpt.get();
-                // SỬA 1: user.getActive() → user.isActive()
                 user.setActive(!user.isActive());
                 user.setUpdatedAt(LocalDateTime.now());
                 userRepository.save(user);
-                // SỬA 2: user.getActive() → user.isActive()
                 return ResponseEntity.ok(Map.of("message", "Cập nhật trạng thái thành công", "isActive", user.isActive()));
             } else {
                 return ResponseEntity.notFound().build();
@@ -151,7 +149,6 @@ public class AdminController {
             String roleStr = (String) userData.get("role");
             Boolean active = userData.get("active") != null ? (Boolean) userData.get("active") : true;
             
-            // Validation
             if (username == null || username.trim().isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Username không được để trống"));
             }
@@ -162,17 +159,14 @@ public class AdminController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Password không được để trống"));
             }
             
-            // Kiểm tra username đã tồn tại
             if (userRepository.existsByUsername(username)) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Username đã tồn tại"));
             }
             
-            // Kiểm tra email đã tồn tại
             if (userRepository.existsByEmail(email)) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Email đã tồn tại"));
             }
             
-            // Tạo user mới
             User user = new User();
             user.setUsername(username.trim());
             user.setEmail(email.trim());
@@ -201,7 +195,6 @@ public class AdminController {
             
             User user = userOpt.get();
             
-            // Cập nhật username nếu có và khác với username hiện tại
             if (userData.containsKey("username")) {
                 String username = (String) userData.get("username");
                 if (username != null && !username.trim().isEmpty()) {
@@ -212,7 +205,6 @@ public class AdminController {
                 }
             }
             
-            // Cập nhật email nếu có và khác với email hiện tại
             if (userData.containsKey("email")) {
                 String email = (String) userData.get("email");
                 if (email != null && !email.trim().isEmpty()) {
@@ -223,7 +215,6 @@ public class AdminController {
                 }
             }
             
-            // Cập nhật password nếu có
             if (userData.containsKey("password") && userData.get("password") != null) {
                 String password = (String) userData.get("password");
                 if (!password.isEmpty()) {
@@ -231,13 +222,11 @@ public class AdminController {
                 }
             }
             
-            // Cập nhật fullName
             if (userData.containsKey("fullName")) {
                 String fullName = (String) userData.get("fullName");
                 user.setFullName(fullName != null ? fullName.trim() : "");
             }
             
-            // Cập nhật role
             if (userData.containsKey("role")) {
                 String roleStr = (String) userData.get("role");
                 if ("ADMIN".equals(roleStr) || "USER".equals(roleStr)) {
@@ -245,7 +234,6 @@ public class AdminController {
                 }
             }
             
-            // Cập nhật active
             if (userData.containsKey("active")) {
                 user.setActive((Boolean) userData.get("active"));
             }
@@ -259,11 +247,6 @@ public class AdminController {
         }
     }
     
-    // ==================== SECURITY ENDPOINTS ====================
-    
-    /**
-     * Lấy danh sách active sessions
-     */
     @GetMapping("/security/sessions/active")
     public ResponseEntity<?> getActiveSessions() {
         try {
@@ -275,9 +258,6 @@ public class AdminController {
         }
     }
     
-    /**
-     * Force logout session
-     */
     @PostMapping("/security/sessions/{sessionId}/invalidate")
     public ResponseEntity<?> forceLogout(@PathVariable String sessionId) {
         try {
@@ -293,9 +273,6 @@ public class AdminController {
         }
     }
     
-    /**
-     * Lấy login history
-     */
     @GetMapping("/security/sessions/history")
     public ResponseEntity<?> getLoginHistory(@RequestParam(defaultValue = "7") int days) {
         try {
@@ -307,9 +284,6 @@ public class AdminController {
         }
     }
     
-    /**
-     * Lấy session statistics
-     */
     @GetMapping("/security/sessions/stats")
     public ResponseEntity<?> getSessionStats() {
         try {
@@ -321,9 +295,6 @@ public class AdminController {
         }
     }
     
-    /**
-     * Force logout tất cả sessions của user
-     */
     @PostMapping("/security/users/{userId}/sessions/invalidate-all")
     public ResponseEntity<?> forceLogoutAllUserSessions(@PathVariable Long userId) {
         try {

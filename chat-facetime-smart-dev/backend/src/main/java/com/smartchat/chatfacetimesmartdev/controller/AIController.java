@@ -14,15 +14,10 @@ public class AIController {
     @Autowired
     private AIService aiService;
 
-    // DTO đơn giản để nhận prompt từ frontend
     public static record AIChatRequest(String prompt) {}
 
     @PostMapping("/chat")
     public ResponseEntity<Map<String, String>> handleChat(@RequestBody AIChatRequest request) {
-
-        // 🔇 GIẢM LOG - chỉ log lỗi
-        // System.out.println("🤖 AIController nhận được prompt: " + request.prompt());
-
         String aiResponse = aiService.getAIResponse(request.prompt());
         return ResponseEntity.ok(Map.of("response", aiResponse));
     }

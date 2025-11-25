@@ -60,11 +60,9 @@ public class RoomController {
     @PostMapping("/{roomId}/join")
     public ResponseEntity<RoomJoinDto> joinRoom(@PathVariable String roomId, @RequestBody RoomJoinDto joinDto) {
         try {
-            // Check if room exists, if not create it as public room
             try {
                 roomService.getRoomInfo(roomId);
             } catch (Exception e) {
-                // Room doesn't exist - auto-create as public room
                 RoomCreateDto createDto = new RoomCreateDto();
                 createDto.setName(roomId);
                 createDto.setRoomId(roomId);

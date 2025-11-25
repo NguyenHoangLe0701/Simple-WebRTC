@@ -35,26 +35,19 @@ public class RoomWebSocketController {
     @MessageMapping("/room/{roomId}/join")
     public void handleJoinRoom(@DestinationVariable String roomId, @Payload Map<String, Object> payload) {
         try {
-            // ✅ Parse data
             String userId = getStringSafe(payload, "userId");
             String username = getStringSafe(payload, "username");
             String fullName = getStringSafe(payload, "fullName");
             String email = getStringSafe(payload, "email");
 
-            // Fallback logic
             if (userId == null && username != null) userId = username;
             if (fullName == null && username != null) fullName = username;
 
-            // Validation
             if (userId == null) {
                 System.err.println("❌ Missing userId in join request");
                 return;
             }
 
-            // 🔇 GIẢM LOG - chỉ log lỗi
-            // System.out.println("👤 User joining - Room: " + roomId + ", User: " + fullName + " (" + userId + ")");
-
-            // Check or create room
             try {
                 roomService.getRoomInfo(roomId);
             } catch (Exception e) {
@@ -70,15 +63,12 @@ public class RoomWebSocketController {
                     createDto.setAllowScreenShare(true);
                     createDto.setAllowChat(true);
                     roomService.createRoom(createDto);
-                    // 🔇 GIẢM LOG - chỉ log lỗi
-                    // System.out.println("🆕 Auto-created room: " + roomId);
                 } catch (Exception ex) {
                     System.err.println("❌ Error creating room: " + ex.getMessage());
                     return;
                 }
             }
 
-            // Join room
             RoomJoinDto joinDto = new RoomJoinDto();
             joinDto.setUserId(userId);
             joinDto.setUsername(username);
@@ -89,11 +79,8 @@ public class RoomWebSocketController {
             boolean needsApproval = roomInfo.isPrivate() && !roomInfo.getApprovedUsers().contains(userId);
 
             if (needsApproval) {
-                // 🔇 GIẢM LOG - chỉ log lỗi
-                // System.out.println("⏳ Waiting approval: " + userId);
                 roomService.joinRoom(roomId, joinDto);
 
-                // Send waiting notification
                 Map<String, Object> notification = Map.of(
                     "type", "waiting_user_request",
                     "user", Map.of("id", userId, "username", username, "fullName", fullName, "email", email),
@@ -113,11 +100,9 @@ public class RoomWebSocketController {
             } else {
                 roomService.joinRoom(roomId, joinDto);
 
-                // Add to presence
                 UserPresence userPresence = new UserPresence(userId, username, fullName, "online", System.currentTimeMillis());
                 presenceService.addOrUpdate(roomId, userPresence);
 
-                // Send approval status
                 Map<String, Object> approvedStatus = Map.of(
                     "type", "approved",
                     "status", "approved",
@@ -125,7 +110,6 @@ public class RoomWebSocketController {
                 );
                 messagingTemplate.convertAndSendToUser(userId, "/queue/approval-status", approvedStatus);
 
-                // Broadcast presence and join notification
                 broadcastPresence(roomId);
 
                 Map<String, Object> joinNotification = Map.of(
@@ -135,9 +119,6 @@ public class RoomWebSocketController {
                     "timestamp", System.currentTimeMillis()
                 );
                 messagingTemplate.convertAndSend("/topic/room/" + roomId, joinNotification);
-                
-                // 🔇 GIẢM LOG - chỉ log lỗi
-                // System.out.println("✅ User joined: " + fullName);
             }
 
         } catch (Exception e) {
@@ -166,14 +147,10 @@ public class RoomWebSocketController {
             }
 
             roomService.approveUser(roomId, targetUserId);
-            // 🔇 GIẢM LOG - chỉ log lỗi
-            // System.out.println("✅ Approved user: " + targetUserId);
 
-            // Add to presence
             UserPresence userPresence = new UserPresence(targetUserId, username, fullName, "online", System.currentTimeMillis());
             presenceService.addOrUpdate(roomId, userPresence);
 
-            // Send approval status
             Map<String, Object> approvedStatus = Map.of(
                 "type", "approved",
                 "status", "approved", 
@@ -181,7 +158,6 @@ public class RoomWebSocketController {
             );
             messagingTemplate.convertAndSendToUser(targetUserId, "/queue/approval-status", approvedStatus);
 
-            // Broadcast updated presence
             broadcastPresence(roomId);
 
         } catch (Exception e) {
@@ -201,13 +177,8 @@ public class RoomWebSocketController {
                 return;
             }
 
-            // 🔇 GIẢM LOG - chỉ log lỗi
-            // System.out.println("👋 User leaving: " + userId);
-
-            // Remove from presence
             presenceService.remove(roomId, userId);
 
-            // Send leave notification
             Map<String, Object> leaveNotification = Map.of(
                 "type", "leave",
                 "user", Map.of("id", userId),
@@ -216,10 +187,8 @@ public class RoomWebSocketController {
             );
             messagingTemplate.convertAndSend("/topic/room/" + roomId, leaveNotification);
 
-            // Broadcast updated presence
             broadcastPresence(roomId);
 
-            // Remove from room service
             roomService.leaveRoom(roomId, userId);
 
         } catch (Exception e) {
@@ -240,17 +209,13 @@ public void handleUserTypingStart(
 
     if (userId == null) return;
 
-    // 🔇 GIẢM LOG - typing events quá nhiều
-    // System.out.println("💬 Typing start: " + userName + " in room " + roomId);
-
     Map<String, Object> userMap = Map.of("id", userId, "name", userName);
     Map<String, Object> typingEvent = Map.of(
         "type", "TYPING_START",
         "user", userMap,
-        "sessionId", sessionId // gửi kèm sessionId để client tự bỏ qua chính nó
+        "sessionId", sessionId
     );
 
-    // Broadcast cho mọi người trong topic
     messagingTemplate.convertAndSend("/topic/room/" + roomId + "/typing", typingEvent);
 }
 
@@ -265,9 +230,6 @@ public void handleUserTypingStop(
     String sessionId = headerAccessor.getSessionId();
 
     if (userId == null) return;
-
-    // 🔇 GIẢM LOG - typing events quá nhiều
-    // System.out.println("💬 Typing stop: " + userName + " in room " + roomId);
 
     Map<String, Object> userMap = Map.of("id", userId, "name", userName);
     Map<String, Object> typingEvent = Map.of(
@@ -306,15 +268,12 @@ public void handleUserTypingStop(
             );
 
             messagingTemplate.convertAndSend("/topic/presence/" + roomId, presence);
-            // 🔇 GIẢM LOG - presence updates quá nhiều
-            // System.out.println("📊 Presence updated - Room: " + roomId + ", Users: " + users.size());
             
         } catch (Exception e) {
             System.err.println("❌ Error broadcasting presence: " + e.getMessage());
         }
     }
 
-    // Helper method
     private String getStringSafe(Map<String, Object> map, String key) {
         if (map == null || key == null) return null;
         Object value = map.get(key);

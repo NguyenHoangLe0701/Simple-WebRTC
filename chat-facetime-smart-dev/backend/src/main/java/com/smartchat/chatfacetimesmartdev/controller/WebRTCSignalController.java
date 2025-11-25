@@ -29,35 +29,21 @@ public class WebRTCSignalController {
             String signalType = getStringSafe(signal, "type");
             String fromUserId = extractUserId(signal);
             
-            // 🔇 GIẢM LOG: Chỉ log các signal quan trọng, không log ICE candidates
             boolean isImportantSignal = signalType != null && 
                 (signalType.equals("join") || signalType.equals("leave") || 
                  signalType.equals("offer") || signalType.equals("answer"));
             
-            // Chỉ log trong development mode hoặc khi có vấn đề
-            // if (isImportantSignal) {
-            //     System.out.println("🎯 WEBRTC SIGNAL - Room: " + roomId + ", Type: " + signalType + ", From: " + fromUserId);
-            // }
-            
-            // Validate signal type
             if (!isValidSignalType(signalType)) {
                 System.err.println("❌ Invalid signal type: " + signalType);
                 return;
             }
             
-            // 🆕 FIX: Sử dụng switch expression
             switch (signalType) {
                 case "join" -> handleJoinSignal(roomId, signal);
                 case "leave" -> handleLeaveSignal(roomId, signal);
                 case "offer", "answer" -> {
-                    // 🔇 KHÔNG LOG - quá nhiều trong production
-                    // if (isImportantSignal) {
-                    //     System.out.println("✅ Broadcasting " + signalType + " to " + roomId);
-                    // }
                 }
                 case "ice-candidate" -> {
-                    // 🔇 KHÔNG LOG ICE CANDIDATES - quá nhiều
-                    // ICE candidates được xử lý im lặng
                 }
                 default -> {
                     if (isImportantSignal) {
@@ -66,28 +52,19 @@ public class WebRTCSignalController {
                 }
             }
             
-            // 🆕 FIX: Tạo signal mới để tránh modify original
             Map<String, Object> broadcastSignal = new HashMap<>(signal);
             
-            // Add server metadata
             broadcastSignal.put("serverProcessed", true);
             broadcastSignal.put("serverTimestamp", System.currentTimeMillis());
             broadcastSignal.put("fromUserId", fromUserId);
             
-            // Broadcast to room
             messagingTemplate.convertAndSend("/topic/signal/" + roomId, broadcastSignal);
-            
-            // 🔇 CHỈ LOG CÁC SIGNAL QUAN TRỌNG
-            // if (isImportantSignal) {
-            //     System.out.println("✅ Signal broadcasted to " + roomId + ", type: " + signalType);
-            // }
             
         } catch (Exception e) {
             System.err.println("❌ Signal handling error: " + e.getMessage());
         }
     }
     
-    // 🆕 FIX: Xử lý join signal chi tiết hơn
     private void handleJoinSignal(String roomId, Map<String, Object> signal) {
         try {
             Object userObj = signal.get("user");
@@ -107,10 +84,7 @@ public class WebRTCSignalController {
                     );
                     
                     presenceService.addOrUpdate(roomId, userPresence);
-                    // 🔇 GIẢM LOG - chỉ log lỗi
-                    // System.out.println("✅ Added user to WebRTC presence: " + userId + " in room: " + roomId);
                     
-                    // 🆕 FIX: Broadcast presence update với danh sách users
                     broadcastFullPresenceUpdate(roomId);
                 } else {
                     System.err.println("⚠️ Invalid user ID in join signal");
@@ -123,17 +97,13 @@ public class WebRTCSignalController {
         }
     }
     
-    // 🆕 FIX: Xử lý leave signal chi tiết hơn
     private void handleLeaveSignal(String roomId, Map<String, Object> signal) {
         try {
             String userId = extractUserId(signal);
             
             if (userId != null && !userId.equals("unknown")) {
                 presenceService.remove(roomId, userId);
-                // 🔇 GIẢM LOG - chỉ log lỗi
-                // System.out.println("✅ Removed user from WebRTC presence: " + userId + " from room: " + roomId);
                 
-                // 🆕 FIX: Broadcast presence update với danh sách users
                 broadcastFullPresenceUpdate(roomId);
             } else {
                 System.err.println("⚠️ Invalid user ID in leave signal");
@@ -143,10 +113,8 @@ public class WebRTCSignalController {
         }
     }
     
-    // 🆕 FIX: Broadcast presence update với full user list - SỬ DỤNG METHOD list() CÓ SẴN
     private void broadcastFullPresenceUpdate(String roomId) {
         try {
-            // 🆕 FIX: Sử dụng method list() có sẵn trong RoomPresenceService
             List<UserPresence> userList = presenceService.list(roomId);
             
             Map<String, Object> presenceUpdate = new HashMap<>();
@@ -158,17 +126,13 @@ public class WebRTCSignalController {
             presenceUpdate.put("message", "Presence updated via WebRTC signaling");
             
             messagingTemplate.convertAndSend("/topic/presence/" + roomId, presenceUpdate);
-            // 🔇 GIẢM LOG - chỉ log lỗi
-            // System.out.println("📊 WebRTC presence update broadcasted for room: " + roomId + " with " + userList.size() + " users");
             
         } catch (Exception e) {
             System.err.println("❌ Error broadcasting presence update: " + e.getMessage());
-            // Fallback: gửi basic presence update
             broadcastBasicPresenceUpdate(roomId);
         }
     }
     
-    // 🆕 FIX: Basic presence update
     private void broadcastBasicPresenceUpdate(String roomId) {
         try {
             Map<String, Object> presenceUpdate = new HashMap<>();
@@ -178,15 +142,12 @@ public class WebRTCSignalController {
             presenceUpdate.put("message", "Presence updated via WebRTC signaling");
             
             messagingTemplate.convertAndSend("/topic/presence/" + roomId, presenceUpdate);
-            // 🔇 GIẢM LOG - chỉ log lỗi
-            // System.out.println("📊 Basic presence update broadcasted for room: " + roomId);
             
         } catch (Exception e) {
             System.err.println("❌ Error broadcasting basic presence update: " + e.getMessage());
         }
     }
     
-    // 🆕 FIX: Kiểm tra signal type với nhiều loại hơn
     private boolean isValidSignalType(String type) {
         return type != null && (
             type.equals("offer") || 
@@ -194,37 +155,31 @@ public class WebRTCSignalController {
             type.equals("ice-candidate") || 
             type.equals("join") || 
             type.equals("leave") ||
-            type.equals("candidate") || // 🆕 Thêm alias cho ice-candidate
-            type.equals("ready") ||     // 🆕 Thêm signal ready
-            type.equals("hangup")       // 🆕 Thêm signal kết thúc call
+            type.equals("candidate") ||
+            type.equals("ready") ||
+            type.equals("hangup")
         );
     }
     
-    // 🆕 FIX: Extract user ID với nhiều fallback hơn - ƯU TIÊN fromUserId
     private String extractUserId(Map<String, Object> signal) {
         try {
-            // 🔥 ƯU TIÊN 1: Lấy trực tiếp từ fromUserId (quan trọng cho ICE candidates)
             Object fromUserIdObj = signal.get("fromUserId");
             if (fromUserIdObj != null) {
                 return fromUserIdObj.toString();
             }
             
-            // Fallback 2: Thử lấy từ user object
             Object userObj = signal.get("user");
             if (userObj instanceof Map<?, ?> userMap) {
                 Object userId = userMap.get("id");
                 if (userId != null) return userId.toString();
                 
-                // Fallback: thử lấy username nếu không có id
                 Object username = userMap.get("username");
                 if (username != null) return username.toString();
             }
             
-            // Fallback 3: Thử lấy trực tiếp từ signal
             Object directUserId = signal.get("userId");
             if (directUserId != null) return directUserId.toString();
             
-            // Fallback 4: Thử lấy từ "from"
             Object fromUser = signal.get("from");
             if (fromUser != null) return fromUser.toString();
             
@@ -236,7 +191,6 @@ public class WebRTCSignalController {
         }
     }
     
-    // 🆕 FIX: Get string safe với type checking tốt hơn
     private String getStringSafe(Map<String, Object> map, String key) {
         if (map == null || key == null) return null;
         try {
@@ -249,7 +203,6 @@ public class WebRTCSignalController {
         }
     }
     
-    // 🆕 FIX: Helper method để lấy string từ Map<?, ?>
     private String getStringFromMap(Map<?, ?> map, String key) {
         if (map == null || key == null) return null;
         try {

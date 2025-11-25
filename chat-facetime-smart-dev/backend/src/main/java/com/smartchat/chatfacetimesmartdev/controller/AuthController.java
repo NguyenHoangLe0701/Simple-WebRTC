@@ -42,7 +42,6 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginDto dto, HttpServletRequest request) {
         try {
-            // Lấy thông tin từ request
             String ipAddress = getClientIpAddress(request);
             String userAgent = request.getHeader("User-Agent");
             String deviceInfo = getDeviceInfo(userAgent);
@@ -56,9 +55,6 @@ public class AuthController {
         }
     }
     
-    /**
-     * Lấy IP address của client
-     */
     private String getClientIpAddress(HttpServletRequest request) {
         String xForwardedFor = request.getHeader("X-Forwarded-For");
         if (xForwardedFor != null && !xForwardedFor.isEmpty() && !"unknown".equalsIgnoreCase(xForwardedFor)) {
@@ -71,9 +67,6 @@ public class AuthController {
         return request.getRemoteAddr();
     }
     
-    /**
-     * Lấy device info từ user agent
-     */
     private String getDeviceInfo(String userAgent) {
         if (userAgent == null || userAgent.isEmpty()) {
             return "Unknown";
