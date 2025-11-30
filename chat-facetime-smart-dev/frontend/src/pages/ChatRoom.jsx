@@ -81,6 +81,9 @@ const ChatRoom = () => {
  const typingTimeoutRef = useRef(null);
   // Mobile responsive state
   const [showSidebar, setShowSidebar] = useState(false);
+  // Emoji picker state
+  const [showReactionPicker, setShowReactionPicker] = useState(null); // messageId của message đang hiển thị picker
+  const reactionEmojis = ['👍', '❤️', '😂', '😮', '😢', '😡']; // Các emoji reaction phổ biến
   
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -92,20 +95,25 @@ const ChatRoom = () => {
     try {
       // Chỉ log trong development mode
       if (process.env.NODE_ENV === 'development') {
-        console.log(`🗑️ Deleting message: ${messageId} in room ${roomId}`);
+        console.log(`🗑️ [TAB 1] Deleting message: ${messageId} in room ${roomId}`);
       }
       
-      // Optimistic update (chỉ cho user hiện tại để UX tốt hơn)
-      // Server sẽ broadcast message DELETE về cho TẤT CẢ user, kể cả user này
+      // Optimistic update (chỉ cho tab hiện tại để UX tốt hơn)
+      // Server sẽ broadcast message DELETE về cho TẤT CẢ tab/user, kể cả tab này
+      // Tab này sẽ nhận DELETE message từ server và xử lý lại (nhưng message đã bị xóa rồi nên không sao)
       setMessages(prev => prev.filter(m => m.id !== messageId));
       
-      // Gửi lệnh xóa qua socket - Server sẽ broadcast về cho TẤT CẢ user
+      // Gửi lệnh xóa qua socket - Server sẽ broadcast về cho TẤT CẢ tab/user
       await socketService.sendDeleteMessage(roomId, messageId);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`✅ [TAB 1] Delete command sent to server for message: ${messageId}`);
+      }
       
     } catch (error) {
       console.error('❌ Error deleting message:', error);
-      // Rollback optimistic update nếu cần
-      // Có thể reload messages từ server ở đây
+      // Rollback optimistic update nếu cần - reload messages từ server
+      // Không rollback ở đây vì server sẽ broadcast DELETE message về
     }
   };
 
@@ -249,33 +257,47 @@ const ChatRoom = () => {
           console.log('🔍 [ALL USERS] Message type parsed:', messageType, 'Original type:', messageData.type, 'Type of:', typeof messageData.type, 'Has sender:', !!messageData.sender);
           
           // Xử lý message xóa - TẤT CẢ USER ĐỀU THẤY (KHÔNG THẤY TIN NHẮN ĐÃ XÓA)
-          // Check cả messageType và cấu trúc message
+          // Check cả messageType và cấu trúc message - CẢI THIỆN LOGIC NHẬN DIỆN
           const isDeleteMessage = messageType === 'delete' || 
                                    messageType === 'DELETE' ||
+                                   (messageData.type && (
+                                     messageData.type === 'delete' || 
+                                     messageData.type === 'DELETE' ||
+                                     (typeof messageData.type === 'object' && (
+                                       messageData.type.name === 'DELETE' || 
+                                       messageData.type.value === 'delete' ||
+                                       messageData.type.name === 'delete'
+                                     ))
+                                   )) ||
                                    (messageData.id && 
-                                    (!messageData.content || messageData.content.trim() === '') && 
-                                    !messageData.sender && !messageData.senderName && !messageData.senderId &&
-                                    (messageData.type === 'delete' || messageData.type === 'DELETE' || 
-                                     (typeof messageData.type === 'object' && (messageData.type.name === 'DELETE' || messageData.type.value === 'delete'))));
+                                    (!messageData.content || messageData.content === '' || messageData.content === null) && 
+                                    !messageData.sender && !messageData.senderName && !messageData.senderId);
           
           if (isDeleteMessage) {
             const messageId = messageData.id;
             if (!messageId) {
-              console.warn('⚠️ Delete message received but no message ID provided');
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('⚠️ Delete message received but no message ID provided');
+              }
               return;
             }
             
-            console.log('🗑️ [USER 2] Delete message received from server:', messageId, 'Full data:', JSON.stringify(messageData));
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🗑️ [ALL TABS] Delete message received from server:', messageId, 'Full data:', JSON.stringify(messageData));
+            }
+            
+            // QUAN TRỌNG: Xóa message trong TẤT CẢ tab, kể cả tab đã xóa (để đồng bộ)
             setMessages(prev => {
               const beforeCount = prev.length;
               const filtered = prev.filter(m => m.id !== messageId);
               const afterCount = filtered.length;
               
-              if (beforeCount !== afterCount) {
-                console.log(`🗑️ [USER 2] ✅ Message ${messageId} removed successfully! Before: ${beforeCount}, After: ${afterCount}`);
-              } else {
-                console.log(`ℹ️ [USER 2] Delete message received for ${messageId} but message not found in state`);
-                console.log('ℹ️ [USER 2] Current message IDs:', prev.map(m => m.id));
+              if (process.env.NODE_ENV === 'development') {
+                if (beforeCount !== afterCount) {
+                  console.log(`🗑️ [ALL TABS] ✅ Message ${messageId} removed successfully! Before: ${beforeCount}, After: ${afterCount}`);
+                } else {
+                  console.log(`ℹ️ [ALL TABS] Delete message received for ${messageId} but message not found in state (may have been already deleted)`);
+                }
               }
               
               return filtered;
@@ -845,6 +867,19 @@ const ChatRoom = () => {
     }
   }, [currentUser, navigate, roomId]);
 
+  // Đóng emoji picker khi click bên ngoài
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showReactionPicker && !event.target.closest('.reaction-picker-container')) {
+        setShowReactionPicker(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showReactionPicker]);
+
   if (!currentUser) {
     return null;
   }
@@ -912,36 +947,59 @@ const ChatRoom = () => {
         >
           Trả lời
         </button>
-        <button 
-          onClick={async () => {
-            const emo = '👍';
-            // Optimistic update
-            setMessages(prev => prev.map(m => 
-              m.id === message.id ? { 
-                ...m, 
-                reactions: { 
-                  ...m.reactions, 
-                  [emo]: (m.reactions?.[emo] || 0) + 1 
-                } 
-              } : m
-            ));
-            
-            // Gửi reaction lên server để broadcast cho tất cả user
-            try {
-              await socketService.sendReaction(roomId, message.id, emo);
-              // Chỉ log trong development mode
-              if (process.env.NODE_ENV === 'development') {
-                console.log('✅ Reaction sent successfully');
-              }
-            } catch (error) {
-              console.error('❌ Error sending reaction:', error);
-              // Rollback optimistic update nếu cần
-            }
-          }} 
-          className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
-        >
-          Cảm xúc
-        </button>
+        <div className="relative reaction-picker-container">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowReactionPicker(showReactionPicker === message.id ? null : message.id);
+            }} 
+            className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
+          >
+            Cảm xúc
+          </button>
+          {showReactionPicker === message.id && (
+            <div 
+              className="absolute bottom-full left-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 p-2 flex gap-1 z-50 reaction-picker-container"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {reactionEmojis.map((emo) => (
+                <button
+                  key={emo}
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setShowReactionPicker(null);
+                    // Optimistic update
+                    setMessages(prev => prev.map(m => 
+                      m.id === message.id ? { 
+                        ...m, 
+                        reactions: { 
+                          ...m.reactions, 
+                          [emo]: (m.reactions?.[emo] || 0) + 1 
+                        } 
+                      } : m
+                    ));
+                    
+                    // Gửi reaction lên server để broadcast cho tất cả user
+                    try {
+                      await socketService.sendReaction(roomId, message.id, emo);
+                      // Chỉ log trong development mode
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('✅ Reaction sent successfully');
+                      }
+                    } catch (error) {
+                      console.error('❌ Error sending reaction:', error);
+                      // Rollback optimistic update nếu cần
+                    }
+                  }}
+                  className="text-xl hover:scale-125 transition-transform p-1 hover:bg-gray-100 rounded"
+                  title={emo}
+                >
+                  {emo}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {isOwn && (
           <>
             <button 
@@ -1456,23 +1514,61 @@ const ChatRoom = () => {
                         {/* KẾt thúc upload file */}
                         <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-0.5 sm:gap-1 flex-wrap opacity-0 group-hover:opacity-100 transition-opacity`}>
                           <button onClick={()=>setReplyTo(message)} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Trả lời</button>
-                          <button onClick={async ()=>{
-                            const emo='👍';
-                            // Optimistic update
-                            setMessages(prev => prev.map(m => m.id===message.id ? { ...m, reactions: { ...m.reactions, [emo]: (m.reactions?.[emo]||0)+1 } } : m));
-                            
-                            // Gửi reaction lên server để broadcast cho tất cả user
-                            try {
-                              await socketService.sendReaction(roomId, message.id, emo);
-                              console.log('✅ Reaction sent successfully');
-                            } catch (error) {
-                              console.error('❌ Error sending reaction:', error);
-                            }
-                          }} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Cảm xúc</button>
+                          <div className="relative reaction-picker-container">
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setShowReactionPicker(showReactionPicker === message.id ? null : message.id);
+                              }} 
+                              className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap"
+                            >
+                              Cảm xúc
+                            </button>
+                            {showReactionPicker === message.id && (
+                              <div 
+                                className="absolute bottom-full left-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 p-2 flex gap-1 z-50 reaction-picker-container"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {reactionEmojis.map((emo) => (
+                                  <button
+                                    key={emo}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      setShowReactionPicker(null);
+                                      // Optimistic update
+                                      setMessages(prev => prev.map(m => 
+                                        m.id === message.id ? { 
+                                          ...m, 
+                                          reactions: { 
+                                            ...m.reactions, 
+                                            [emo]: (m.reactions?.[emo] || 0) + 1 
+                                          } 
+                                        } : m
+                                      ));
+                                      
+                                      // Gửi reaction lên server để broadcast cho tất cả user
+                                      try {
+                                        await socketService.sendReaction(roomId, message.id, emo);
+                                        if (process.env.NODE_ENV === 'development') {
+                                          console.log('✅ Reaction sent successfully');
+                                        }
+                                      } catch (error) {
+                                        console.error('❌ Error sending reaction:', error);
+                                      }
+                                    }}
+                                    className="text-xl hover:scale-125 transition-transform p-1 hover:bg-gray-100 rounded"
+                                    title={emo}
+                                  >
+                                    {emo}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           {isOwn && (
                             <>
                               <button onClick={()=>{ setEditingMessageId(message.id); setEditingContent(message.content); }} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Sửa</button>
-                              <button onClick={()=> setMessages(prev => prev.filter(m => m.id!==message.id))} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 text-red-600 whitespace-nowrap">Xóa</button>
+                              <button onClick={()=> handleDeleteMessage(message.id)} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 text-red-600 whitespace-nowrap">Xóa</button>
                             </>
                           )}
                         </div>
