@@ -1,6 +1,138 @@
-import React from "react";
+import React, { useEffect } from "react";
+import TutorialStep1 from "./docs/TutorialStep1";
+import TutorialStep2 from "./docs/TutorialStep2";
+import TutorialStep3 from "./docs/TutorialStep3";
+import TutorialStep4 from "./docs/TutorialStep4";
+import TutorialStep5 from "./docs/TutorialStep5";
+import TutorialStep6 from "./docs/TutorialStep6";
+import TutorialComplete from "./docs/TutorialComplete";
+import UserDataIntegration from "./docs/UserDataIntegration";
+import ServerSideAPI from "./docs/ServerSideAPI";
+import ReduxActions from "./docs/ReduxActions";
+import ReduxStore from "./docs/ReduxStore";
+import Components from "./docs/Components";
+import ReactReduxVersions from "./docs/ReactReduxVersions";
+import Upgrading from "./docs/Upgrading";
+import ErrorCodes from "./docs/ErrorCodes";
+import SDKReleaseNotes from "./docs/SDKReleaseNotes";
+import CreatingApp from "./docs/CreatingApp";
 
-function DocsContent() {
+function DocsContent({ currentSection }) {
+  // User Data Integration sections - scroll to specific step
+  useEffect(() => {
+    if (currentSection === "userData-1") {
+      setTimeout(() => {
+        const element = document.getElementById("step-1");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+    } else if (currentSection === "userData-2") {
+      setTimeout(() => {
+        const element = document.getElementById("step-2");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+    } else if (currentSection === "userData-3") {
+      setTimeout(() => {
+        const element = document.getElementById("step-3");
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+    }
+  }, [currentSection]);
+
+  // Debug: Log current section
+  useEffect(() => {
+    console.log("Current section:", currentSection);
+  }, [currentSection]);
+
+  // Render tutorial components based on currentSection
+  if (currentSection === "tutorial-1") {
+    return <TutorialStep1 />;
+  }
+  if (currentSection === "tutorial-2") {
+    return <TutorialStep2 />;
+  }
+  if (currentSection === "tutorial-3") {
+    return <TutorialStep3 />;
+  }
+  if (currentSection === "tutorial-4") {
+    return <TutorialStep4 />;
+  }
+  if (currentSection === "tutorial-5") {
+    return <TutorialStep5 />;
+  }
+  if (currentSection === "tutorial-6") {
+    try {
+      return <TutorialStep6 />;
+    } catch (error) {
+      console.error("Error rendering TutorialStep6:", error);
+      return (
+        <section className="content p-6 ml-64 pt-[104px]">
+          <article className="markdown-section max-w-3xl mx-auto">
+            <h1 className="text-3xl font-bold mb-6">Lỗi khi tải nội dung</h1>
+            <p>Vui lòng thử lại sau.</p>
+          </article>
+        </section>
+      );
+    }
+  }
+  if (currentSection === "tutorial-complete") {
+    try {
+      return <TutorialComplete />;
+    } catch (error) {
+      console.error("Error rendering TutorialComplete:", error);
+      return (
+        <section className="content p-6 ml-64 pt-[104px]">
+          <article className="markdown-section max-w-3xl mx-auto">
+            <h1 className="text-3xl font-bold mb-6">Lỗi khi tải nội dung</h1>
+            <p>Vui lòng thử lại sau.</p>
+          </article>
+        </section>
+      );
+    }
+  }
+  
+  if (currentSection === "userData" || currentSection === "userData-1" || currentSection === "userData-2" || currentSection === "userData-3") {
+    return <UserDataIntegration />;
+  }
+  
+  // Other sections
+  if (currentSection === "httpApi") {
+    return <ServerSideAPI />;
+  }
+  if (currentSection === "reduxActions") {
+    console.log("Rendering ReduxActions");
+    return <ReduxActions />;
+  }
+  if (currentSection === "reduxStore") {
+    console.log("Rendering ReduxStore");
+    return <ReduxStore />;
+  }
+  if (currentSection === "components") {
+    return <Components />;
+  }
+  if (currentSection === "versions") {
+    return <ReactReduxVersions />;
+  }
+  if (currentSection === "upgrading") {
+    return <Upgrading />;
+  }
+  if (currentSection === "errors") {
+    return <ErrorCodes />;
+  }
+  if (currentSection === "release") {
+    return <SDKReleaseNotes />;
+  }
+  
+  if (currentSection === "creating-app") {
+    return <CreatingApp />;
+  }
+
+  // Default content (overview)
   return (
     <section className="content p-6 ml-64 pt-[104px]">
       <article className="markdown-section max-w-3xl mx-auto">
