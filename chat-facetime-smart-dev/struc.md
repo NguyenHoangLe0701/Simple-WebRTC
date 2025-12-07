@@ -1,3 +1,142 @@
+# Hướng dẫn Tích hợp Lịch sử Tin nhắn
+
+Phần này mô tả các bước cần thiết để thêm tính năng lưu và truy xuất lịch sử tin nhắn cho từng người dùng vào dự án.
+
+## 1. Cập nhật Backend (Spring Boot)
+
+Mục tiêu là tạo một cơ sở để lưu trữ mọi tin nhắn được gửi đi và cung cấp một API để truy xuất chúng.
+
+### Bước 1: Tạo Bảng `chat_messages` trong Database
+
+Bạn không cần tạo bảng thủ công. JPA với cấu hình `spring.jpa.hibernate.ddl-auto=update` trong file `application.properties` sẽ tự động tạo bảng khi bạn định nghĩa Entity dưới đây.
+
+### Bước 2: Tạo `ChatMessage` Entity
+
+Tạo một file mới `ChatMessage.java` trong thư mục `chat-facetime-smart-dev/backend/src/main/java/com/example/chatfacetimesmartdev/entity/` để định nghĩa cấu trúc của một tin nhắn.
+
+**File cần tạo:** `backend/src/main/java/com/example/chatfacetimesmartdev/entity/ChatMessage.java`
+
+```java
+package com.example.chatfacetimesmartdev.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "chat_messages")
+@Data
+public class ChatMessage {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne
+    @JoinColumn(name = "sender_id", nullable = false)
+    private User sender;
+
+    @ManyToOne
+    @JoinColumn(name = "recipient_id", nullable = false)
+    private User recipient;
+
+    @Column(nullable = false, columnDefinition = "TEXT")
+    private String content;
+
+    @Column(nullable = false)
+    private LocalDateTime timestamp;
+
+    @PrePersist
+    protected void onCreate() {
+        this.timestamp = LocalDateTime.now();
+    }
+}
+package com.example.chatfacetimesmartdev.repository;
+
+import com.example.chatfacetimesmartdev.entity.ChatMessage;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+import java.util.List;
+
+public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
+
+    @Query("SELECT m FROM ChatMessage m WHERE (m.sender.id = :userId1 AND m.recipient.id = :userId2) OR (m.sender.id = :userId2 AND m.recipient.id = :userId1) ORDER BY m.timestamp ASC")
+    List<ChatMessage> findChatHistory(@Param("userId1") Long userId1, @Param("userId2") Long userId2);
+}
+package com.example.chatfacetimesmartdev.service;
+
+// Interface
+public interface MessageService {
+    ChatMessage saveMessage(ChatMessage chatMessage);
+    List<ChatMessage> getChatHistory(Long userId1, Long userId2);
+}
+package com.example.chatfacetimesmartdev.service.impl;
+
+// Implementation
+// Inject ChatMessageRepository và UserRepository
+// Implement phương thức saveMessage và getChatHistory
+package com.example.chatfacetimesmartdev.controller;
+
+import org.springframework.web.bind.annotation.*;
+import org.springframework.http.ResponseEntity;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/messages")
+public class MessageController {
+
+    // Inject MessageService
+
+    @GetMapping("/history/{userId1}/{userId2}")
+    public ResponseEntity<List<ChatMessage>> getChatHistory(@PathVariable Long userId1, @PathVariable Long userId2) {
+        // Gọi service để lấy lịch sử tin nhắn
+        // Trả về danh sách tin nhắn
+        return ResponseEntity.ok(messageService.getChatHistory(userId1, userId2));
+    }
+}
+// Thêm hàm mới
+export const getChatHistory = async (userId1, userId2, token) => {
+  const response = await fetch(`/api/messages/history/${userId1}/`, {
+    headers: {
+      'Authorization': `Bearer `
+    }
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch chat history');
+  }
+  return response.json();
+};
+import React, { useEffect, useState } from 'react';
+import { getChatHistory } from '../services/apiService';
+
+const ChatRoom = ({ currentUser, selectedUser }) => {
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    if (selectedUser) {
+      const fetchHistory = async () => {
+        try {
+          const token = localStorage.getItem('token'); // Lấy token từ localStorage
+          const history = await getChatHistory(currentUser.id, selectedUser.id, token);
+          setMessages(history);
+        } catch (error) {
+          console.error("Error fetching chat history:", error);
+        }
+      };
+      fetchHistory();
+    }
+  }, [currentUser, selectedUser]); // Effect này sẽ chạy lại khi selectedUser thay đổi
+
+  // ... logic nhận tin nhắn mới từ WebSocket
+  // Khi có tin nhắn mới, thêm nó vào state `messages`
+  // ví dụ: setMessages(prevMessages => [...prevMessages, newMessage]);
+
+  return (
+    // JSX để render danh sách tin nhắn từ state `messages`
+  );
+};
 # Dự án: chat-facetime-smart-dev
 
 Tập tin này mô tả đầy đủ cấu trúc file và thư mục của dự án (toàn bộ workspace), kèm mô tả ngắn cho từng mục. Nội dung được tạo dựa trên việc quét toàn bộ thư mục `frontend/`, `backend/`, `docker/` và các file ở root.
