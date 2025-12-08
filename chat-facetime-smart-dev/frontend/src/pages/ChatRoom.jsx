@@ -33,6 +33,8 @@ import CodeEditor from '../components/CodeEditor';
 import { Virtuoso } from 'react-virtuoso';
 import socketService from '../services/socket';
 import FileUploadService from '../services/FileUploadService';
+import { getChatHistoryByRoom } from '../services/messageService';
+import callService from '../services/callService';
 
 const ChatRoom = () => {
   const { roomId = 'general' } = useParams();
@@ -170,10 +172,59 @@ const ChatRoom = () => {
     }
   }, [onlineUsers]);
 
+  // Effect để tải lịch sử tin nhắn khi vào phòng
+  useEffect(() => {
+    if (!currentUser || !roomId) return;
+
+    const fetchChatHistory = async () => {
+      try {
+        const history = await getChatHistoryByRoom(roomId);
+        
+        // Chuyển đổi từ entity format sang format mà component sử dụng
+        const formattedMessages = history.map(msg => {
+          const callType = msg.messageType ? msg.messageType.toLowerCase() : '';
+          const isCall = callType === 'video_call' || callType === 'voice_call';
+          
+          return {
+          id: `db_${msg.id}`,
+          sender: msg.senderName || (msg.sender ? msg.sender.username : 'Unknown'),
+          senderId: msg.senderIdString || (msg.sender ? String(msg.sender.id) : 'unknown'),
+          content: msg.content,
+          timestamp: msg.timestamp ? new Date(msg.timestamp).toISOString() : new Date().toISOString(),
+          type: msg.messageType ? msg.messageType.toLowerCase() : 'text',
+          roomId: msg.roomId,
+          avatar: msg.avatar || (msg.senderName ? msg.senderName.charAt(0).toUpperCase() : 'U'),
+          fileName: msg.fileName,
+          fileSize: msg.fileSize,
+          language: msg.codeLanguage,
+          // map call info nếu có
+          callInfo: isCall ? {
+            type: callType === 'video_call' ? 'video' : 'voice',
+            action: msg.callAction || (msg.content && msg.content.includes('kết thúc') ? 'end' : 'start'),
+            duration: msg.callDurationSeconds || null,
+          } : null,
+        };
+        });
+        
+        setMessages(formattedMessages);
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Loaded chat history:', formattedMessages.length, 'messages');
+        }
+      } catch (error) {
+        console.error('❌ Error fetching chat history:', error);
+        // Không set messages = [] để không xóa tin nhắn đã có
+      }
+    };
+
+    fetchChatHistory();
+  }, [roomId, currentUser]);
+
   useEffect(() => {
     if (!currentUser) return;
 
-    setMessages([]);
+    // Không reset messages ở đây nữa vì đã được tải từ lịch sử
+    // setMessages([]);
     setOnlineUsers([]);
     setConnectionStatus('connecting');
     
@@ -444,7 +495,8 @@ const ChatRoom = () => {
       fileSize: messageData.fileSize,
       language: messageData.codeLanguage || messageData.language,
       replyTo: messageData.replyTo || null, // Thêm replyTo - QUAN TRỌNG: user 2 sẽ thấy reply
-      reactions: messageData.reactions || null // Thêm reactions - QUAN TRỌNG: user 2 sẽ thấy reactions
+      reactions: messageData.reactions || null, // Thêm reactions - QUAN TRỌNG: user 2 sẽ thấy reactions
+      callInfo: messageData.callInfo || null // Giữ thông tin cuộc gọi (duration, action)
     };
     
     // Log chi tiết để debug
@@ -460,12 +512,22 @@ const ChatRoom = () => {
     console.log('💬 [USER 2] Processing normal message - ID:', processedMessage.id, 'replyTo:', processedMessage.replyTo, 'reactions:', processedMessage.reactions);
     
     setMessages(prev => {
-      const existingMsg = prev.find(m => m.id === processedMessage.id);
+      // Kiểm tra trùng lặp dựa trên ID hoặc (senderId + content + timestamp gần nhau)
+      const existingMsg = prev.find(m => 
+        m.id === processedMessage.id || 
+        (m.senderId === processedMessage.senderId && 
+         m.content === processedMessage.content && 
+         Math.abs(new Date(m.timestamp).getTime() - new Date(processedMessage.timestamp).getTime()) < 5000)
+      );
       if (existingMsg) {
-        console.log('💬 Message already exists in state');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('💬 Message already exists in state, skipping duplicate');
+        }
         return prev;
       }
-      console.log('💬 ✅ Adding new message to state');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('💬 ✅ Adding new message to state');
+      }
       return [...prev, processedMessage];
     });
     
@@ -810,6 +872,83 @@ const ChatRoom = () => {
     setIsScreenSharing(false);
   };
 
+  // 🆕 Hàm xử lý khi bắt đầu cuộc gọi
+  const handleCallStart = async (callType) => {
+    const senderName = currentUser?.fullName || currentUser?.username || 'Bạn';
+    const callTypeText = callType === 'video' ? 'cuộc gọi video' : 'cuộc gọi thoại';
+    
+    // Gọi API lưu lịch sử cuộc gọi
+    try {
+      await callService.startCall(roomId, callType);
+    } catch (error) {
+      console.error('❌ Không thể lưu bắt đầu cuộc gọi:', error);
+    }
+
+    const message = {
+      id: `call_start_${Date.now()}`,
+      sender: senderName,
+      senderId: currentUser?.id || currentUser?.username,
+      content: `${senderName} đã bắt đầu ${callTypeText}`,
+      type: callType === 'video' ? 'video_call' : 'voice_call',
+      roomId: roomId,
+      timestamp: new Date().toISOString(),
+      avatar: senderName.charAt(0).toUpperCase(),
+      callInfo: {
+        type: callType,
+        action: 'start'
+      }
+    };
+    
+    try {
+      await socketService.sendMessage(roomId, message);
+      setMessages(prev => [...prev, message]);
+    } catch (error) {
+      console.error('❌ Error sending call start message:', error);
+    }
+  };
+
+  // 🆕 Hàm xử lý khi kết thúc cuộc gọi
+  const handleCallEnd = async (callType, durationFromClient) => {
+    const senderName = currentUser?.fullName || currentUser?.username || 'Bạn';
+    const callTypeText = callType === 'video' ? 'cuộc gọi video' : 'cuộc gọi thoại';
+    
+    // Lấy duration từ server (ưu tiên) để hiển thị chính xác cho tất cả mọi người
+    let duration = durationFromClient;
+    try {
+      const data = await callService.endCall(roomId);
+      if (data?.durationSeconds != null) {
+        duration = data.durationSeconds;
+      }
+    } catch (error) {
+      console.error('❌ Không thể lưu kết thúc cuộc gọi:', error);
+    }
+    
+    const message = {
+      id: `call_end_${Date.now()}`,
+      sender: senderName,
+      senderId: currentUser?.id || currentUser?.username,
+      content: duration != null 
+        ? `${senderName} đã kết thúc ${callTypeText}. Thời lượng: ${formatCallDuration(duration)}`
+        : `${senderName} đã kết thúc ${callTypeText}`,
+      type: callType === 'video' ? 'video_call' : 'voice_call',
+      roomId: roomId,
+      timestamp: new Date().toISOString(),
+      avatar: senderName.charAt(0).toUpperCase(),
+      callInfo: {
+        type: callType,
+        action: 'end',
+        duration: duration
+      }
+    };
+    
+    try {
+      await socketService.sendMessage(roomId, message);
+      setMessages(prev => [...prev, message]);
+    } catch (error) {
+      console.error('❌ Error sending call end message:', error);
+    }
+  };
+
   const toggleMute = () => {
     setIsMuted(!isMuted);
   };
@@ -828,6 +967,20 @@ const ChatRoom = () => {
     } catch (e) {
       return 'Vừa xong';
     }
+  };
+
+  // 🆕 Format thời lượng cuộc gọi
+  const formatCallDuration = (seconds) => {
+    if (!seconds || seconds < 0) return '0 giây';
+    if (seconds < 60) {
+      return `${seconds} giây`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (secs === 0) {
+      return `${minutes} phút`;
+    }
+    return `${minutes} phút ${secs} giây`;
   };
 
   const getStatusColor = (status) => {
@@ -1112,6 +1265,46 @@ const ChatRoom = () => {
             className="max-w-[200px] sm:max-w-xs rounded-lg object-cover cursor-pointer mt-2" 
             onClick={() => window.open(message.content, '_blank')}
           />
+        );
+
+      case 'video_call':
+      case 'voice_call':
+        const callInfo = message.callInfo || {};
+        const isStart = callInfo.action === 'start';
+        const isEnd = callInfo.action === 'end';
+        const duration = callInfo.duration;
+        
+        return (
+          <div className={`${isOwn ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-gray-200'} rounded-lg px-3 sm:px-4 py-2 sm:py-3 mt-2 inline-block max-w-xs sm:max-w-md`}>
+            <div className="flex items-center gap-2 sm:gap-3">
+              {callInfo.type === 'video' ? (
+                <Video className={`h-5 w-5 sm:h-6 sm:w-6 ${isStart ? 'text-blue-500' : 'text-gray-500'}`} />
+              ) : (
+                <Phone className={`h-5 w-5 sm:h-6 sm:w-6 ${isStart ? 'text-green-500' : 'text-gray-500'}`} />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className={`text-xs sm:text-sm font-medium ${isOwn ? 'text-blue-700' : 'text-gray-700'}`}>
+                  {isStart ? (
+                    <>
+                      {callInfo.type === 'video' ? '📹 Cuộc gọi video' : '📞 Cuộc gọi thoại'}
+                    </>
+                  ) : (
+                    <>
+                      {callInfo.type === 'video' ? '📹 Đã kết thúc cuộc gọi video' : '📞 Đã kết thúc cuộc gọi thoại'}
+                    </>
+                  )}
+                </p>
+                {isEnd && duration && (
+                  <p className={`text-xs mt-1 ${isOwn ? 'text-blue-600' : 'text-gray-600'}`}>
+                    ⏱️ {formatCallDuration(duration)}
+                  </p>
+                )}
+                <p className={`text-xs mt-1 ${isOwn ? 'text-blue-600' : 'text-gray-600'}`}>
+                  {message.sender}
+                </p>
+              </div>
+            </div>
+          </div>
         );
 
       default:
@@ -1511,6 +1704,38 @@ const ChatRoom = () => {
                           onClick={() => window.open(message.content, '_blank')} // Click để xem ảnh
                         />
                       )}
+                        {(message.type === 'video_call' || message.type === 'voice_call') && (
+                          <div className={`${isOwn ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-gray-200'} rounded-lg px-3 sm:px-4 py-2 sm:py-3 mt-2 inline-block max-w-xs sm:max-w-md`}>
+                            <div className="flex items-center gap-2 sm:gap-3">
+                              {message.callInfo?.type === 'video' ? (
+                                <Video className={`h-5 w-5 sm:h-6 sm:w-6 ${message.callInfo?.action === 'start' ? 'text-blue-500' : 'text-gray-500'}`} />
+                              ) : (
+                                <Phone className={`h-5 w-5 sm:h-6 sm:w-6 ${message.callInfo?.action === 'start' ? 'text-green-500' : 'text-gray-500'}`} />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs sm:text-sm font-medium ${isOwn ? 'text-blue-700' : 'text-gray-700'}`}>
+                                  {message.callInfo?.action === 'start' ? (
+                                    <>
+                                      {message.callInfo?.type === 'video' ? '📹 Cuộc gọi video' : '📞 Cuộc gọi thoại'}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {message.callInfo?.type === 'video' ? '📹 Đã kết thúc cuộc gọi video' : '📞 Đã kết thúc cuộc gọi thoại'}
+                                    </>
+                                  )}
+                                </p>
+                                {message.callInfo?.action === 'end' && message.callInfo?.duration && (
+                                  <p className={`text-xs mt-1 ${isOwn ? 'text-blue-600' : 'text-gray-600'}`}>
+                                    ⏱️ {formatCallDuration(message.callInfo.duration)}
+                                  </p>
+                                )}
+                                <p className={`text-xs mt-1 ${isOwn ? 'text-blue-600' : 'text-gray-600'}`}>
+                                  {message.sender}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                         {/* KẾt thúc upload file */}
                         <div className={`mt-1 flex ${isOwn ? 'justify-end' : 'justify-start'} gap-0.5 sm:gap-1 flex-wrap opacity-0 group-hover:opacity-100 transition-opacity`}>
                           <button onClick={()=>setReplyTo(message)} className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-gray-100 hover:bg-gray-200 whitespace-nowrap">Trả lời</button>
@@ -1721,6 +1946,8 @@ const ChatRoom = () => {
         roomId={roomId}
         currentUser={currentUser}
         callType={isVideoCall ? 'video' : 'voice'}
+        onCallStart={handleCallStart}
+        onCallEnd={handleCallEnd}
       />
 
       {/* Share Room Modal */}

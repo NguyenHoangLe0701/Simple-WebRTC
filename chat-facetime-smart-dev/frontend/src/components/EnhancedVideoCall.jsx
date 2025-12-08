@@ -3,9 +3,10 @@ import socketService from '../services/socket';
 import webrtcService from '../services/webrtc.service';
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Monitor, Users, Camera, CameraOff } from 'lucide-react';
 
-const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType = 'video' }) => {
+const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType = 'video', onCallStart, onCallEnd }) => {
   const localVideoRef = useRef(null);
   const cleanupInProgress = useRef(false);
+  const callStartTime = useRef(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
@@ -261,6 +262,14 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
       setPermissionStatus('granted');
       setLocalStream(stream);
       setIsInitialized(true);
+      
+      // Lưu thời gian bắt đầu cuộc gọi
+      callStartTime.current = Date.now();
+      
+      // Gửi thông báo bắt đầu cuộc gọi
+      if (onCallStart) {
+        onCallStart(callType);
+      }
 
     } catch (error) {
       setPermissionStatus('denied');
@@ -726,6 +735,18 @@ const EnhancedVideoCall = ({ isActive, onEndCall, roomId, currentUser, callType 
   const cleanup = () => {
     if (cleanupInProgress.current) return;
     cleanupInProgress.current = true;
+
+    // Tính toán duration trước khi cleanup
+    if (isInitialized && callStartTime.current) {
+      const duration = Math.floor((Date.now() - callStartTime.current) / 1000); // seconds
+      
+      // Gửi thông báo kết thúc cuộc gọi với duration
+      if (onCallEnd) {
+        onCallEnd(callType, duration);
+      }
+    }
+    
+    callStartTime.current = null;
 
     // Dừng local stream
     if (localStream) {
