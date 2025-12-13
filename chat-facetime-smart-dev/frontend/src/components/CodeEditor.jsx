@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Play, 
   Download, 
@@ -20,16 +20,12 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
   const [fileName, setFileName] = useState('code.js');
   const textareaRef = useRef(null);
 
-  const languages = [
+  const languages = useMemo(() => [
     { value: 'javascript', label: 'JavaScript', extension: '.js' },
     { value: 'python', label: 'Python', extension: '.py' },
     { value: 'java', label: 'Java', extension: '.java' },
     { value: 'cpp', label: 'C++', extension: '.cpp' },
-    { value: 'html', label: 'HTML', extension: '.html' },
-    { value: 'css', label: 'CSS', extension: '.css' },
-    { value: 'json', label: 'JSON', extension: '.json' },
-    { value: 'sql', label: 'SQL', extension: '.sql' }
-  ];
+  ], []);
 
   useEffect(() => {
     if (isOpen && textareaRef.current) {
@@ -42,7 +38,7 @@ const CodeEditor = ({ isOpen, onClose, onSendCode, initialCode = '', initialLang
     if (currentLang) {
       setFileName(`code${currentLang.extension}`);
     }
-  }, [language]);
+  }, [language, languages]);
 
   const handleLanguageChange = (newLanguage) => {
     setLanguage(newLanguage);

@@ -27,7 +27,7 @@ public class CodeExecutionService {
         this.restTemplate = new RestTemplate(factory);
         String envUrl = System.getenv("SANDBOX_URL");
         if (envUrl == null || envUrl.isBlank()) {
-            envUrl = "https://code-executor-latest-1.onrender.com";
+            envUrl = "https://sandbox-code-executor.onrender.com";
         }
         this.sandboxUrl = envUrl;
     }

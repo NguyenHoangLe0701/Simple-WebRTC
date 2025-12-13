@@ -1,15 +1,19 @@
 package com.smartchat.chatfacetimesmartdev.service;
 
-import com.smartchat.chatfacetimesmartdev.dto.CodeExecutionResult;
-import org.springframework.http.*;
+import java.util.Map;
+
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
-import java.util.Map;
+import com.smartchat.chatfacetimesmartdev.dto.CodeExecutionResult;
 
 @Service
 public class DockerCodeExecutionService {
@@ -27,7 +31,7 @@ public class DockerCodeExecutionService {
 
         String envUrl = System.getenv("SANDBOX_URL");
         this.sandboxUrl = (envUrl == null || envUrl.isBlank())
-                ? "https://code-executor-latest-1.onrender.com"
+                ? "https://sandbox-code-executor.onrender.com"
                 : envUrl;
     }
 
