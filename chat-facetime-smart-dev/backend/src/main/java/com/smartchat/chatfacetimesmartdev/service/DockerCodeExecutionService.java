@@ -97,43 +97,4 @@ public class DockerCodeExecutionService {
     public CodeExecutionResult executeCpp(String code, String fileName) {
         return callSandbox(sandboxUrl + "/run/cpp", Map.of("code", code));
     }
-
-    public CodeExecutionResult executeHtml(String code, String fileName) {
-        boolean ok = code.matches("(?s).*<html.*>.*</html>.*")
-                || code.matches("(?s).*<body.*>.*</body>.*")
-                || code.matches("(?s).*<div.*>.*</div>.*");
-
-        return new CodeExecutionResult(
-                ok ? "HTML appears valid" : "",
-                ok ? "" : "Invalid basic HTML structure",
-                ok
-        );
-    }
-
-    public CodeExecutionResult executeCss(String code, String fileName) {
-        boolean ok = code.matches("(?s).*\\{[^}]*\\}.*");
-        return new CodeExecutionResult(
-                ok ? "CSS valid" : "",
-                ok ? "" : "Possible CSS syntax error",
-                ok
-        );
-    }
-
-    public CodeExecutionResult executeJson(String code, String fileName) {
-        try {
-            new com.fasterxml.jackson.databind.ObjectMapper().readTree(code);
-            return new CodeExecutionResult("Valid JSON", "", true);
-        } catch (Exception e) {
-            return new CodeExecutionResult("", "Invalid JSON: " + e.getMessage(), false);
-        }
-    }
-
-    public CodeExecutionResult executeSql(String code, String fileName) {
-        boolean ok = code.toUpperCase().matches("(?s).*\\b(SELECT|INSERT|UPDATE|DELETE)\\b.*");
-        return new CodeExecutionResult(
-                ok ? "Likely valid SQL" : "",
-                ok ? "" : "No SQL keywords found",
-                ok
-        );
-    }
 }

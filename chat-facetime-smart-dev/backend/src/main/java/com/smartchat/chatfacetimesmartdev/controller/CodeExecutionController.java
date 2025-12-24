@@ -1,11 +1,16 @@
 package com.smartchat.chatfacetimesmartdev.controller;
 
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.smartchat.chatfacetimesmartdev.dto.CodeExecutionRequest;
 import com.smartchat.chatfacetimesmartdev.dto.CodeExecutionResult;
 import com.smartchat.chatfacetimesmartdev.service.DockerCodeExecutionService;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/code")
@@ -49,21 +54,9 @@ public class CodeExecutionController {
                 case "c++":
                     result = dockerCodeExecutionService.executeCpp(request.getCode(), request.getFileName());
                     break;
-                case "html":
-                    result = dockerCodeExecutionService.executeHtml(request.getCode(), request.getFileName());
-                    break;
-                case "css":
-                    result = dockerCodeExecutionService.executeCss(request.getCode(), request.getFileName());
-                    break;
-                case "json":
-                    result = dockerCodeExecutionService.executeJson(request.getCode(), request.getFileName());
-                    break;
-                case "sql":
-                    result = dockerCodeExecutionService.executeSql(request.getCode(), request.getFileName());
-                    break;
                 default:
                     return ResponseEntity.badRequest()
-                            .body(new CodeExecutionResult("", "Unsupported language: " + language, false));
+                    .body(new CodeExecutionResult("", "Unsupported language: " + language, false));
             }
 
             if (result == null) {
@@ -106,30 +99,6 @@ public class CodeExecutionController {
     @PostMapping("/execute/cpp")
     public ResponseEntity<CodeExecutionResult> executeCpp(@RequestBody CodeExecutionRequest request) {
         CodeExecutionResult result = dockerCodeExecutionService.executeCpp(request.getCode(), request.getFileName());
-        return ResponseEntity.ok(result);
-    }
-
-    @PostMapping("/execute/html")
-    public ResponseEntity<CodeExecutionResult> executeHtml(@RequestBody CodeExecutionRequest request) {
-        CodeExecutionResult result = dockerCodeExecutionService.executeHtml(request.getCode(), request.getFileName());
-        return ResponseEntity.ok(result);
-    }
-
-    @PostMapping("/execute/css")
-    public ResponseEntity<CodeExecutionResult> executeCss(@RequestBody CodeExecutionRequest request) {
-        CodeExecutionResult result = dockerCodeExecutionService.executeCss(request.getCode(), request.getFileName());
-        return ResponseEntity.ok(result);
-    }
-
-    @PostMapping("/execute/json")
-    public ResponseEntity<CodeExecutionResult> executeJson(@RequestBody CodeExecutionRequest request) {
-        CodeExecutionResult result = dockerCodeExecutionService.executeJson(request.getCode(), request.getFileName());
-        return ResponseEntity.ok(result);
-    }
-
-    @PostMapping("/execute/sql")
-    public ResponseEntity<CodeExecutionResult> executeSql(@RequestBody CodeExecutionRequest request) {
-        CodeExecutionResult result = dockerCodeExecutionService.executeSql(request.getCode(), request.getFileName());
         return ResponseEntity.ok(result);
     }
 }
